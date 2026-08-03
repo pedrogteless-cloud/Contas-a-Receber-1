@@ -1,0 +1,375 @@
+// ---------------------------------------------------------------------------
+// lib/boletos.ts
+// Tipos, formatadores e parsers do relatório Sicoob (XLSX e PDF).
+// App interno Grupo Ley — "Contas a Receber 1".
+// ---------------------------------------------------------------------------
+
+export const EMPRESAS = ["Ley Móveis", "Ley Colchões"] as const;
+export type Empresa = (typeof EMPRESAS)[number];
+
+/** Registro persistido na tabela `boletos`. */
+export interface Boleto {
+  id: string;
+  data_importacao: string; // ISO yyyy-mm-dd
+  empresa: string;
+  sacado: string;
+  nosso_numero: string | null;
+  seu_numero: string | null;
+  data_entrada: string | null; // ISO yyyy-mm-dd
+  data_vencimento: string | null; // ISO yyyy-mm-dd
+  valor: number;
+  prazo_dias: number | null;
+  excedeu_limite: boolean;
+  alerta_enviado: boolean;
+  created_at: string;
+}
+
+/** Linha extraída do relatório, ainda editável na tela de conferência. */
+export interface LinhaImportada {
+  empresa: string;
+  sacado: string;
+  nosso_numero: string;
+  seu_numero: string;
+  data_entrada: string | null; // ISO yyyy-mm-dd
+  data_vencimento: string | null; // ISO yyyy-mm-dd
+  valor: number;
+  prazo_dias: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Formatação (pt-BR)
+// ---------------------------------------------------------------------------
+
+/** ISO (yyyy-mm-dd) -> DD/MM/AAAA. */
+export function formatarData(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/** number -> "R$ 1.234,56". */
+export function formatarMoeda(valor: number | null | undefined): string {
+  const n = typeof valor === "number" && Number.isFinite(valor) ? valor : 0;
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Parsing de valores e datas
+// ---------------------------------------------------------------------------
+
+function removerAcentos(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+function normalizar(s: unknown): string {
+  return removerAcentos(String(s ?? "").toLowerCase()).trim();
+}
+
+/** Converte serial de data do Excel (base 1899-12-30) para ISO. */
+function serialExcelParaISO(serial: number): string | null {
+  if (!Number.isFinite(serial)) return null;
+  // Excel: dia 1 = 1900-01-01, com o bug do ano 1900. Base 1899-12-30.
+  const ms = Math.round((serial - 25569) * 86400 * 1000);
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Interpreta uma célula de data (string DD/MM/AAAA, Date do SheetJS ou serial
+ * numérico do Excel) e devolve ISO yyyy-mm-dd, ou null.
+ */
+export function parseData(valor: unknown): string | null {
+  if (valor == null || valor === "") return null;
+
+  if (valor instanceof Date) {
+    if (Number.isNaN(valor.getTime())) return null;
+    // Normaliza para meia-noite local -> ISO.
+    const ano = valor.getFullYear();
+    const mes = String(valor.getMonth() + 1).padStart(2, "0");
+    const dia = String(valor.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  if (typeof valor === "number") {
+    // Numa coluna de data, um número é serial do Excel.
+    if (valor > 20000 && valor < 90000) return serialExcelParaISO(valor);
+    return null;
+  }
+
+  const texto = String(valor).trim();
+
+  // Já em ISO?
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(texto);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  // DD/MM/AAAA ou DD/MM/AA (com hora opcional).
+  const br = /^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})/.exec(texto);
+  if (br) {
+    let [, dia, mes, ano] = br;
+    if (ano.length === 2) ano = Number(ano) > 70 ? `19${ano}` : `20${ano}`;
+    const d = dia.padStart(2, "0");
+    const mo = mes.padStart(2, "0");
+    if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > 31)
+      return null;
+    return `${ano}-${mo}-${d}`;
+  }
+
+  return null;
+}
+
+/** Interpreta um valor monetário (number ou string "1.234,56"/"R$ ..."). */
+export function parseValor(valor: unknown): number {
+  if (valor == null || valor === "") return 0;
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : 0;
+
+  let s = String(valor).trim();
+  s = s.replace(/r\$/gi, "").replace(/\s/g, "");
+  if (!s) return 0;
+
+  const temVirgula = s.includes(",");
+  const temPonto = s.includes(".");
+
+  if (temVirgula && temPonto) {
+    // Formato pt-BR: ponto = milhar, vírgula = decimal.
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (temVirgula) {
+    // Só vírgula -> decimal.
+    s = s.replace(",", ".");
+  }
+  // Só ponto -> assume decimal (ex.: "1234.56").
+
+  const n = parseFloat(s.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Dias corridos entre entrada e vencimento (>= 0), ou null. */
+export function calcularPrazoDias(
+  entradaISO: string | null,
+  vencimentoISO: string | null
+): number | null {
+  if (!entradaISO || !vencimentoISO) return null;
+  const a = Date.parse(`${entradaISO}T00:00:00Z`);
+  const b = Date.parse(`${vencimentoISO}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+// ---------------------------------------------------------------------------
+// Nome do cliente
+// ---------------------------------------------------------------------------
+
+const CONECTIVOS = new Set([
+  "de", "da", "do", "das", "dos", "e", "ltda", "me", "epp", "eireli",
+  "sa", "s/a", "s.a", "cia", "&",
+]);
+
+/** Versão curta do nome do sacado para exibição em chip. */
+export function abreviarNome(nome: string): string {
+  const limpo = (nome ?? "").trim().replace(/\s+/g, " ");
+  if (!limpo) return "—";
+
+  const palavras = limpo.split(" ");
+  if (palavras.length <= 2) return limpo;
+
+  const significativas = palavras.filter(
+    (p) => !CONECTIVOS.has(removerAcentos(p.toLowerCase()))
+  );
+  const base = significativas.length >= 2 ? significativas : palavras;
+  return base.slice(0, 2).join(" ");
+}
+
+// ---------------------------------------------------------------------------
+// Extração a partir da matriz do XLSX (SheetJS header:1)
+// ---------------------------------------------------------------------------
+
+type Coluna =
+  | "sacado"
+  | "nosso_numero"
+  | "seu_numero"
+  | "data_entrada"
+  | "data_vencimento"
+  | "valor";
+
+function detectarColunas(cabecalho: unknown[]): Partial<Record<Coluna, number>> {
+  const map: Partial<Record<Coluna, number>> = {};
+
+  cabecalho.forEach((celula, idx) => {
+    const h = normalizar(celula);
+    if (!h) return;
+
+    if (map.nosso_numero == null && h.includes("nosso")) {
+      map.nosso_numero = idx;
+    } else if (
+      map.seu_numero == null &&
+      (h.includes("seu numero") || h.includes("seu nº") || h === "documento" ||
+        h.includes("nº doc") || h.includes("num doc") || h.includes("num. doc"))
+    ) {
+      map.seu_numero = idx;
+    } else if (
+      map.sacado == null &&
+      (h.includes("sacado") || h.includes("pagador") || h.includes("cliente") ||
+        h === "nome" || h.includes("razao"))
+    ) {
+      map.sacado = idx;
+    } else if (
+      map.data_entrada == null &&
+      (h.includes("entrada") || h.includes("emissao") || h.includes("emissão"))
+    ) {
+      map.data_entrada = idx;
+    } else if (
+      map.data_vencimento == null &&
+      (h.includes("vencimento") || h === "venc" || h.includes("venc."))
+    ) {
+      map.data_vencimento = idx;
+    } else if (
+      map.valor == null &&
+      h.includes("valor") &&
+      !h.includes("pago") && !h.includes("recebido") && !h.includes("juros") &&
+      !h.includes("multa") && !h.includes("desconto") && !h.includes("abatimento")
+    ) {
+      map.valor = idx;
+    }
+  });
+
+  return map;
+}
+
+/** Extrai as linhas de uma matriz de células (sheet_to_json com header:1). */
+export function extrairDeMatriz(
+  matriz: unknown[][],
+  empresaPadrao = ""
+): LinhaImportada[] {
+  if (!Array.isArray(matriz) || matriz.length === 0) return [];
+
+  // Encontra a linha de cabeçalho: aquela com mais colunas reconhecidas.
+  let headerIdx = -1;
+  let melhorMap: Partial<Record<Coluna, number>> = {};
+  let melhorScore = 0;
+
+  const limite = Math.min(matriz.length, 25);
+  for (let i = 0; i < limite; i++) {
+    const linha = matriz[i] ?? [];
+    const map = detectarColunas(linha);
+    const score = Object.keys(map).length;
+    if (score > melhorScore) {
+      melhorScore = score;
+      melhorMap = map;
+      headerIdx = i;
+    }
+  }
+
+  // Precisa de ao menos vencimento + valor para valer a pena.
+  if (headerIdx === -1 || melhorMap.data_vencimento == null || melhorMap.valor == null) {
+    return [];
+  }
+
+  const linhas: LinhaImportada[] = [];
+
+  for (let i = headerIdx + 1; i < matriz.length; i++) {
+    const row = matriz[i] ?? [];
+    if (!Array.isArray(row) || row.every((c) => c == null || c === "")) continue;
+
+    const sacado =
+      melhorMap.sacado != null ? String(row[melhorMap.sacado] ?? "").trim() : "";
+    const entrada =
+      melhorMap.data_entrada != null ? parseData(row[melhorMap.data_entrada]) : null;
+    const vencimento = parseData(row[melhorMap.data_vencimento!]);
+    const valor = parseValor(row[melhorMap.valor!]);
+
+    // Ignora linhas de total/rodapé (sem sacado e sem vencimento).
+    const primeira = normalizar(row[0]);
+    if (primeira.startsWith("total") || primeira.startsWith("subtotal")) continue;
+    if (!sacado && !vencimento) continue;
+
+    const nosso_numero =
+      melhorMap.nosso_numero != null
+        ? String(row[melhorMap.nosso_numero] ?? "").trim()
+        : "";
+    const seu_numero =
+      melhorMap.seu_numero != null
+        ? String(row[melhorMap.seu_numero] ?? "").trim()
+        : "";
+
+    linhas.push({
+      empresa: empresaPadrao,
+      sacado,
+      nosso_numero,
+      seu_numero,
+      data_entrada: entrada,
+      data_vencimento: vencimento,
+      valor,
+      prazo_dias: calcularPrazoDias(entrada, vencimento),
+    });
+  }
+
+  return linhas;
+}
+
+// ---------------------------------------------------------------------------
+// Extração a partir do texto do PDF
+// ---------------------------------------------------------------------------
+
+const RE_DATA = /\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/g;
+const RE_VALOR = /\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/g;
+const RE_NUM_LONGO = /\b\d{5,}\b/g;
+
+/**
+ * Extrai linhas do texto puro do PDF. Heurística: cada linha com pelo menos
+ * duas datas e um valor é um título (entrada, vencimento e valor). Os números
+ * longos à esquerda viram nosso número / seu número; o restante alfabético é
+ * o sacado.
+ */
+export function extrairDeTexto(texto: string, empresaPadrao = ""): LinhaImportada[] {
+  if (!texto) return [];
+
+  const linhas: LinhaImportada[] = [];
+  const brutas = texto.split(/\r?\n/);
+
+  for (const bruta of brutas) {
+    const linha = bruta.replace(/\s+/g, " ").trim();
+    if (!linha) continue;
+
+    const datas = Array.from(linha.matchAll(RE_DATA)).map((m) => m[1]);
+    const valores = Array.from(linha.matchAll(RE_VALOR)).map((m) => m[1]);
+    if (datas.length < 2 || valores.length < 1) continue;
+
+    const entrada = parseData(datas[0]);
+    const vencimento = parseData(datas[1]);
+    const valor = parseValor(valores[valores.length - 1]);
+
+    // Números longos (nosso/seu número) tirados do início da linha.
+    const numeros = Array.from(linha.matchAll(RE_NUM_LONGO)).map((m) => m[0]);
+    const nosso_numero = numeros[0] ?? "";
+    const seu_numero = numeros[1] ?? "";
+
+    // Sacado = restante alfabético, removendo datas, valores e números longos.
+    let resto = linha;
+    for (const d of datas) resto = resto.replace(d, " ");
+    for (const v of valores) resto = resto.replace(v, " ");
+    resto = resto.replace(RE_NUM_LONGO, " ");
+    const sacado = resto
+      .replace(/[^0-9A-Za-zÀ-ÿ&./ -]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    linhas.push({
+      empresa: empresaPadrao,
+      sacado,
+      nosso_numero,
+      seu_numero,
+      data_entrada: entrada,
+      data_vencimento: vencimento,
+      valor,
+      prazo_dias: calcularPrazoDias(entrada, vencimento),
+    });
+  }
+
+  return linhas;
+}

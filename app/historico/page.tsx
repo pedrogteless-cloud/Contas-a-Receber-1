@@ -1,0 +1,392 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Send, Search } from "lucide-react";
+
+import { supabase } from "@/lib/supabase";
+import {
+  abreviarNome,
+  formatarData,
+  formatarMoeda,
+  type Boleto,
+} from "@/lib/boletos";
+import { prazoMedio } from "@/lib/analytics";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const OPCOES_EMPRESA = [
+  "Todas",
+  "Ley Móveis",
+  "Ley Colchões",
+  "Não classificado",
+] as const;
+
+export default function HistoricoPage() {
+  const [boletos, setBoletos] = useState<Boleto[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const [busca, setBusca] = useState("");
+  const [empresa, setEmpresa] = useState<string>("Todas");
+  const [impIni, setImpIni] = useState("");
+  const [impFim, setImpFim] = useState("");
+  const [vencIni, setVencIni] = useState("");
+  const [vencFim, setVencFim] = useState("");
+
+  async function carregar() {
+    setCarregando(true);
+    const { data } = await supabase
+      .from("boletos")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setBoletos((data ?? []) as Boleto[]);
+    setCarregando(false);
+  }
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  const filtrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return boletos.filter((b) => {
+      if (termo && !(b.sacado ?? "").toLowerCase().includes(termo)) return false;
+      if (empresa !== "Todas") {
+        const emp = b.empresa || "Não classificado";
+        if (emp !== empresa) return false;
+      }
+      if (impIni && (!b.data_importacao || b.data_importacao < impIni))
+        return false;
+      if (impFim && (!b.data_importacao || b.data_importacao > impFim))
+        return false;
+      if (vencIni && (!b.data_vencimento || b.data_vencimento < vencIni))
+        return false;
+      if (vencFim && (!b.data_vencimento || b.data_vencimento > vencFim))
+        return false;
+      return true;
+    });
+  }, [boletos, busca, empresa, impIni, impFim, vencIni, vencFim]);
+
+  const excedidos = useMemo(
+    () => filtrados.filter((b) => b.excedeu_limite),
+    [filtrados]
+  );
+
+  const pm = prazoMedio(filtrados);
+  const valorExcedido = excedidos.reduce((s, b) => s + (b.valor ?? 0), 0);
+  const pendentes = excedidos.filter((b) => !b.alerta_enviado).length;
+
+  const resumoImportacoes = useMemo(() => {
+    const mapa = new Map<
+      string,
+      { quantidade: number; valor: number; excedidos: number }
+    >();
+    for (const b of filtrados) {
+      const chave = b.data_importacao || "—";
+      const cur = mapa.get(chave) ?? { quantidade: 0, valor: 0, excedidos: 0 };
+      cur.quantidade++;
+      cur.valor += b.valor ?? 0;
+      if (b.excedeu_limite) cur.excedidos++;
+      mapa.set(chave, cur);
+    }
+    return Array.from(mapa.entries())
+      .map(([data, v]) => ({ data, ...v }))
+      .sort((a, b) => (a.data < b.data ? 1 : -1));
+  }, [filtrados]);
+
+  async function enviarPendentes() {
+    setEnviando(true);
+    setAviso(null);
+    try {
+      const resp = await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const r = (await resp.json()) as {
+        enviados: number;
+        pendentes: number;
+        motivo: string;
+      };
+      if (r.motivo === "ok") {
+        setAviso(
+          `${r.enviados} alerta(s) enviado(s). ${r.pendentes} ainda pendente(s).`
+        );
+      } else if (r.motivo === "sem_token") {
+        setAviso("Telegram sem token configurado — nada enviado.");
+      } else if (r.motivo === "sem_destinatarios") {
+        setAviso("Nenhum destinatário cadastrado em Configurações.");
+      }
+      await carregar();
+    } catch (err) {
+      console.error(err);
+      setAviso("Erro ao enviar alertas.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Histórico</h1>
+        <p className="text-sm text-muted-foreground">
+          Consulte importações e boletos acima do limite de prazo.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Indicador titulo="Total de boletos" valor={String(filtrados.length)} />
+        <Indicador
+          titulo="Prazo médio de recebimento"
+          valor={pm != null ? `${pm} dias` : "—"}
+        />
+        <Indicador
+          titulo="Excederam o limite"
+          valor={String(excedidos.length)}
+        />
+        <Indicador
+          titulo="Valor que excedeu"
+          valor={formatarMoeda(valorExcedido)}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label>Buscar sacado</Label>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="Nome do sacado"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Empresa</Label>
+            <Select value={empresa} onValueChange={setEmpresa}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OPCOES_EMPRESA.map((e) => (
+                  <SelectItem key={e} value={e}>
+                    {e}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label>Importação de</Label>
+              <Input
+                type="date"
+                value={impIni}
+                onChange={(e) => setImpIni(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>até</Label>
+              <Input
+                type="date"
+                value={impFim}
+                onChange={(e) => setImpFim(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label>Vencimento de</Label>
+              <Input
+                type="date"
+                value={vencIni}
+                onChange={(e) => setVencIni(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>até</Label>
+              <Input
+                type="date"
+                value={vencFim}
+                onChange={(e) => setVencFim(e.target.value)}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Importações por data</CardTitle>
+          <CardDescription>
+            Resumo de cada data de importação (após filtros).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {resumoImportacoes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sem dados.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead className="text-right">Boletos</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="text-right">Acima do limite</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {resumoImportacoes.map((r) => (
+                  <TableRow key={r.data}>
+                    <TableCell>{formatarData(r.data)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {r.quantidade}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatarMoeda(r.valor)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {r.excedidos}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Boletos acima do limite</CardTitle>
+              <CardDescription>
+                {excedidos.length} boleto(s) · {pendentes} alerta(s) pendente(s)
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              {aviso && (
+                <span className="text-sm text-muted-foreground">{aviso}</span>
+              )}
+              <Button
+                onClick={enviarPendentes}
+                disabled={enviando || pendentes === 0}
+              >
+                {enviando ? <Loader2 className="animate-spin" /> : <Send />}
+                Enviar alertas pendentes
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {carregando ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+            </div>
+          ) : excedidos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum boleto acima do limite nos filtros atuais.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Sacado</TableHead>
+                  <TableHead>Nosso nº</TableHead>
+                  <TableHead>Entrada</TableHead>
+                  <TableHead>Vencimento</TableHead>
+                  <TableHead className="text-right">Prazo</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Alerta</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {excedidos.map((b) => (
+                  <TableRow key={b.id}>
+                    <TableCell>{b.empresa || "—"}</TableCell>
+                    <TableCell>
+                      <span
+                        className="inline-flex max-w-[160px] truncate rounded-full bg-secondary px-2 py-0.5 text-xs"
+                        title={b.sacado}
+                      >
+                        {abreviarNome(b.sacado)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-[220px] truncate" title={b.sacado}>
+                      {b.sacado}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {b.nosso_numero || "—"}
+                    </TableCell>
+                    <TableCell>{formatarData(b.data_entrada)}</TableCell>
+                    <TableCell>{formatarData(b.data_vencimento)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {b.prazo_dias ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatarMoeda(b.valor)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={b.alerta_enviado ? "success" : "warning"}>
+                        {b.alerta_enviado ? "Enviado" : "Pendente"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function Indicador({ titulo, valor }: { titulo: string; valor: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardDescription>{titulo}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className={cn("text-2xl font-semibold tabular-nums")}>{valor}</div>
+      </CardContent>
+    </Card>
+  );
+}
