@@ -316,48 +316,42 @@ export function extrairDeMatriz(
 // Extração a partir do texto do PDF
 // ---------------------------------------------------------------------------
 
-const RE_DATA = /\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/g;
-const RE_VALOR = /\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/g;
-const RE_NUM_LONGO = /\b\d{5,}\b/g;
+// Registro do relatório Sicoob no texto do PDF. Ex. (campos podem vir colados):
+//   253-9 421735-0148281 PATRICIO ANTONIO BARBOSA - ME 31/07/2026 1.797,0003/08/2026
+// Grupos: (1) números (nosso/seu), (2) sacado, (3) entrada, (4) valor, (5) vencimento.
+const RE_REGISTRO_PDF =
+  /(\d[\d-]*(?:\s+\d[\d-]*)*)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,&/'-]*?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{2}\/\d{2}\/\d{4})/g;
 
 /**
- * Extrai linhas do texto puro do PDF. Heurística: cada linha com pelo menos
- * duas datas e um valor é um título (entrada, vencimento e valor). Os números
- * longos à esquerda viram nosso número / seu número; o restante alfabético é
- * o sacado.
+ * Extrai as linhas do texto puro do PDF do relatório Sicoob.
+ *
+ * O extrator do PDF concatena todo o conteúdo (sem quebras de linha) e cola
+ * alguns campos: valor+vencimento ("1.797,0003/08/2026") e nosso+seu número
+ * ("421735-0148281"). Primeiro "descolamos" esses campos e então varremos os
+ * registros por regex: números, sacado, entrada, valor e vencimento.
  */
 export function extrairDeTexto(texto: string, empresaPadrao = ""): LinhaImportada[] {
   if (!texto) return [];
 
+  let s = texto.replace(/\s+/g, " ");
+  // Descola valor colado no vencimento: "1.797,0003/08/2026" -> "... ,00 03/08/2026".
+  s = s.replace(/(,\d{2})(\d{2}\/\d{2}\/\d{4})/g, "$1 $2");
+  // Descola nosso número colado no seu número: "421735-0148281" -> "421735-01 48281".
+  s = s.replace(/(-\d{2})(\d{4,})/g, "$1 $2");
+
   const linhas: LinhaImportada[] = [];
-  const brutas = texto.split(/\r?\n/);
+  let m: RegExpExecArray | null;
+  RE_REGISTRO_PDF.lastIndex = 0;
 
-  for (const bruta of brutas) {
-    const linha = bruta.replace(/\s+/g, " ").trim();
-    if (!linha) continue;
+  while ((m = RE_REGISTRO_PDF.exec(s)) !== null) {
+    const tokens = m[1].trim().split(/\s+/);
+    const nosso_numero = tokens[0] ?? "";
+    const seu_numero = tokens.slice(1).join(" ");
 
-    const datas = Array.from(linha.matchAll(RE_DATA)).map((m) => m[1]);
-    const valores = Array.from(linha.matchAll(RE_VALOR)).map((m) => m[1]);
-    if (datas.length < 2 || valores.length < 1) continue;
-
-    const entrada = parseData(datas[0]);
-    const vencimento = parseData(datas[1]);
-    const valor = parseValor(valores[valores.length - 1]);
-
-    // Números longos (nosso/seu número) tirados do início da linha.
-    const numeros = Array.from(linha.matchAll(RE_NUM_LONGO)).map((m) => m[0]);
-    const nosso_numero = numeros[0] ?? "";
-    const seu_numero = numeros[1] ?? "";
-
-    // Sacado = restante alfabético, removendo datas, valores e números longos.
-    let resto = linha;
-    for (const d of datas) resto = resto.replace(d, " ");
-    for (const v of valores) resto = resto.replace(v, " ");
-    resto = resto.replace(RE_NUM_LONGO, " ");
-    const sacado = resto
-      .replace(/[^0-9A-Za-zÀ-ÿ&./ -]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const sacado = m[2].replace(/\s+/g, " ").trim();
+    const entrada = parseData(m[3]);
+    const valor = parseValor(m[4]);
+    const vencimento = parseData(m[5]);
 
     linhas.push({
       empresa: empresaPadrao,
