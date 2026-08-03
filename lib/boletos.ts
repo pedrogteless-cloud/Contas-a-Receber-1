@@ -320,7 +320,7 @@ export function extrairDeMatriz(
 //   253-9 421735-0148281 PATRICIO ANTONIO BARBOSA - ME 31/07/2026 1.797,0003/08/2026
 // Grupos: (1) números (nosso/seu), (2) sacado, (3) entrada, (4) valor, (5) vencimento.
 const RE_REGISTRO_PDF =
-  /(\d[\d-]*(?:\s+\d[\d-]*)*)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,&/'-]*?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{2}\/\d{2}\/\d{4})/g;
+  /(\d[\d-]*(?:\s+\d[\d-]*)*)\s+(-?\s*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,&/'-]*?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{2}\/\d{2}\/\d{4})/g;
 
 /**
  * Extrai as linhas do texto puro do PDF do relatório Sicoob.
@@ -348,7 +348,7 @@ export function extrairDeTexto(texto: string, empresaPadrao = ""): LinhaImportad
     const nosso_numero = tokens[0] ?? "";
     const seu_numero = tokens.slice(1).join(" ");
 
-    const sacado = m[2].replace(/\s+/g, " ").trim();
+    const sacado = m[2].replace(/^[-\s]+/, "").replace(/\s+/g, " ").trim();
     const entrada = parseData(m[3]);
     const valor = parseValor(m[4]);
     const vencimento = parseData(m[5]);
