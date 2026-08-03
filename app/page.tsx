@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   Loader2,
   Plus,
+  Sparkles,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -69,7 +70,10 @@ export default function ImportacaoPage() {
   const [aviso, setAviso] = useState<Aviso>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string>("");
   const [arrastando, setArrastando] = useState(false);
+  const [lendoIA, setLendoIA] = useState(false);
+  const [arrastandoIA, setArrastandoIA] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const iaRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase
@@ -136,6 +140,79 @@ export default function ImportacaoPage() {
     } finally {
       setProcessando(false);
       if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function lerComIA(files: FileList) {
+    setLendoIA(true);
+    setAviso(null);
+    try {
+      const arquivos = [];
+      for (const f of Array.from(files)) {
+        const nome = f.name.toLowerCase();
+        const data = await lerComoBase64(f);
+        if (nome.endsWith(".pdf")) {
+          arquivos.push({ tipo: "pdf", media_type: "application/pdf", data });
+        } else {
+          const media_type =
+            f.type ||
+            (nome.endsWith(".png")
+              ? "image/png"
+              : nome.endsWith(".webp")
+                ? "image/webp"
+                : "image/jpeg");
+          arquivos.push({ tipo: "image", media_type, data });
+        }
+      }
+
+      const resp = await fetch("/api/ler-documento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arquivos }),
+      });
+      const r = (await resp.json()) as {
+        linhas: LinhaImportada[];
+        motivo: string;
+      };
+
+      if (r.motivo === "sem_chave") {
+        setAviso({
+          tipo: "erro",
+          texto:
+            "Leitor por IA ainda não configurado — falta a ANTHROPIC_API_KEY (adicione na Vercel).",
+        });
+        return;
+      }
+      if (r.motivo !== "ok") {
+        setAviso({ tipo: "erro", texto: "Não foi possível ler o documento." });
+        return;
+      }
+
+      const editaveis: LinhaEditavel[] = (r.linhas ?? []).map((l) => ({
+        ...l,
+        _id: novoId(),
+        empresa: empresaPadrao,
+        prazo_dias: calcularPrazoDias(l.data_entrada, l.data_vencimento),
+      }));
+      setLinhas(editaveis);
+      setAviso(
+        editaveis.length > 0
+          ? {
+              tipo: "ok",
+              texto: `${editaveis.length} linha(s) lida(s) pela IA. Confira e ajuste antes de importar.`,
+            }
+          : {
+              tipo: "info",
+              texto:
+                "A IA não encontrou duplicatas no documento. Adicione manualmente se necessário.",
+            }
+      );
+    } catch (err) {
+      console.error(err);
+      setAviso({ tipo: "erro", texto: "Erro ao ler o documento com IA." });
+    } finally {
+      setLendoIA(false);
+      if (iaRef.current) iaRef.current.value = "";
     }
   }
 
@@ -377,6 +454,65 @@ export default function ImportacaoPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-brand/25 bg-brand/[0.03]">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-brand" /> Leitor por IA — nota ou
+            duplicata
+          </CardTitle>
+          <CardDescription>
+            Mande a foto ou o PDF de uma nota/duplicata (não precisa de padrão).
+            A IA lê e preenche a conferência com as parcelas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <input
+            ref={iaRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) lerComIA(e.target.files);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => iaRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setArrastandoIA(true);
+            }}
+            onDragLeave={() => setArrastandoIA(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setArrastandoIA(false);
+              if (e.dataTransfer.files?.length) lerComIA(e.dataTransfer.files);
+            }}
+            className={cn(
+              "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+              arrastandoIA
+                ? "border-brand bg-brand/10"
+                : "border-brand/40 hover:border-brand hover:bg-brand/5"
+            )}
+          >
+            {lendoIA ? (
+              <Loader2 className="h-7 w-7 animate-spin text-brand" />
+            ) : (
+              <Sparkles className="h-7 w-7 text-brand" />
+            )}
+            <span className="text-sm font-medium">
+              {lendoIA
+                ? "Lendo o documento…"
+                : "Solte a foto/PDF aqui ou clique para ler com IA"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Aceita JPG, PNG e PDF · pode enviar vários
+            </span>
+          </button>
+        </CardContent>
+      </Card>
 
       {linhas.length > 0 && (
         <Card>

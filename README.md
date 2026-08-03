@@ -33,7 +33,16 @@ NEXT_PUBLIC_SUPABASE_URL=          # URL do projeto Supabase
 NEXT_PUBLIC_SUPABASE_ANON_KEY=     # chave publicável (anon)
 SUPABASE_SERVICE_ROLE_KEY=         # Supabase -> Settings -> API -> service_role
 TELEGRAM_BOT_TOKEN=                # token do bot criado no @BotFather
+ANTHROPIC_API_KEY=                 # leitor por IA (notas/duplicatas) — console.anthropic.com
 ```
+
+Opcional: `EXTRACAO_MODEL` troca o modelo do leitor por IA (padrão `claude-opus-5`;
+use `claude-sonnet-5` ou `claude-haiku-4-5` para reduzir custo).
+
+O **leitor por IA** (tela de Importação) usa a API do Claude para ler fotos/PDFs
+de notas e duplicatas fora de padrão e preencher a conferência. Sem a
+`ANTHROPIC_API_KEY` o app funciona normalmente; apenas o leitor por IA fica
+indisponível.
 
 `SUPABASE_SERVICE_ROLE_KEY` e `TELEGRAM_BOT_TOKEN` são usados **apenas** em
 route handlers do servidor (`app/api/telegram`). O `.env.local` está no
