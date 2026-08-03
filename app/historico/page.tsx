@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Send, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  FileStack,
+  Gauge,
+  Loader2,
+  Search,
+  Send,
+  Wallet,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import {
@@ -11,7 +19,9 @@ import {
   type Boleto,
 } from "@/lib/boletos";
 import { prazoMedio } from "@/lib/analytics";
-import { cn } from "@/lib/utils";
+import { corEmpresa } from "@/lib/theme";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -81,23 +92,15 @@ export default function HistoricoPage() {
         const emp = b.empresa || "Não classificado";
         if (emp !== empresa) return false;
       }
-      if (impIni && (!b.data_importacao || b.data_importacao < impIni))
-        return false;
-      if (impFim && (!b.data_importacao || b.data_importacao > impFim))
-        return false;
-      if (vencIni && (!b.data_vencimento || b.data_vencimento < vencIni))
-        return false;
-      if (vencFim && (!b.data_vencimento || b.data_vencimento > vencFim))
-        return false;
+      if (impIni && (!b.data_importacao || b.data_importacao < impIni)) return false;
+      if (impFim && (!b.data_importacao || b.data_importacao > impFim)) return false;
+      if (vencIni && (!b.data_vencimento || b.data_vencimento < vencIni)) return false;
+      if (vencFim && (!b.data_vencimento || b.data_vencimento > vencFim)) return false;
       return true;
     });
   }, [boletos, busca, empresa, impIni, impFim, vencIni, vencFim]);
 
-  const excedidos = useMemo(
-    () => filtrados.filter((b) => b.excedeu_limite),
-    [filtrados]
-  );
-
+  const excedidos = useMemo(() => filtrados.filter((b) => b.excedeu_limite), [filtrados]);
   const pm = prazoMedio(filtrados);
   const valorExcedido = excedidos.reduce((s, b) => s + (b.valor ?? 0), 0);
   const pendentes = excedidos.filter((b) => !b.alerta_enviado).length;
@@ -134,15 +137,12 @@ export default function HistoricoPage() {
         pendentes: number;
         motivo: string;
       };
-      if (r.motivo === "ok") {
-        setAviso(
-          `${r.enviados} alerta(s) enviado(s). ${r.pendentes} ainda pendente(s).`
-        );
-      } else if (r.motivo === "sem_token") {
+      if (r.motivo === "ok")
+        setAviso(`${r.enviados} alerta(s) enviado(s). ${r.pendentes} pendente(s).`);
+      else if (r.motivo === "sem_token")
         setAviso("Telegram sem token configurado — nada enviado.");
-      } else if (r.motivo === "sem_destinatarios") {
+      else if (r.motivo === "sem_destinatarios")
         setAviso("Nenhum destinatário cadastrado em Configurações.");
-      }
       await carregar();
     } catch (err) {
       console.error(err);
@@ -154,38 +154,45 @@ export default function HistoricoPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Histórico</h1>
-        <p className="text-sm text-muted-foreground">
-          Consulte importações e boletos acima do limite de prazo.
-        </p>
-      </div>
+      <PageHeader
+        title="Histórico"
+        description="Consulte importações e boletos acima do limite de prazo."
+      />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Indicador titulo="Total de boletos" valor={String(filtrados.length)} />
-        <Indicador
-          titulo="Prazo médio de recebimento"
-          valor={pm != null ? `${pm} dias` : "—"}
-        />
-        <Indicador
-          titulo="Excederam o limite"
-          valor={String(excedidos.length)}
-        />
-        <Indicador
-          titulo="Valor que excedeu"
-          valor={formatarMoeda(valorExcedido)}
-        />
-      </div>
+      {carregando ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total de boletos" value={String(filtrados.length)} icon={FileStack} tom="brand" />
+          <StatCard
+            label="Prazo médio de recebimento"
+            value={pm != null ? `${pm} dias` : "—"}
+            icon={Gauge}
+          />
+          <StatCard
+            label="Excederam o limite"
+            value={String(excedidos.length)}
+            hint={`${pendentes} alerta(s) pendente(s)`}
+            icon={AlertTriangle}
+            tom={excedidos.length > 0 ? "danger" : "success"}
+          />
+          <StatCard label="Valor que excedeu" value={formatarMoeda(valorExcedido)} icon={Wallet} tom="warning" />
+        </div>
+      )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <Label>Buscar sacado</Label>
             <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-8"
                 placeholder="Nome do sacado"
@@ -212,100 +219,81 @@ export default function HistoricoPage() {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label>Importação de</Label>
-              <Input
-                type="date"
-                value={impIni}
-                onChange={(e) => setImpIni(e.target.value)}
-              />
+              <Input type="date" value={impIni} onChange={(e) => setImpIni(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>até</Label>
-              <Input
-                type="date"
-                value={impFim}
-                onChange={(e) => setImpFim(e.target.value)}
-              />
+              <Input type="date" value={impFim} onChange={(e) => setImpFim(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label>Vencimento de</Label>
-              <Input
-                type="date"
-                value={vencIni}
-                onChange={(e) => setVencIni(e.target.value)}
-              />
+              <Input type="date" value={vencIni} onChange={(e) => setVencIni(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>até</Label>
-              <Input
-                type="date"
-                value={vencFim}
-                onChange={(e) => setVencFim(e.target.value)}
-              />
+              <Input type="date" value={vencFim} onChange={(e) => setVencFim(e.target.value)} />
             </div>
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Importações por data</CardTitle>
-          <CardDescription>
-            Resumo de cada data de importação (após filtros).
-          </CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Importações por data</CardTitle>
+          <CardDescription>Resumo de cada data de importação (após filtros).</CardDescription>
         </CardHeader>
         <CardContent>
-          {resumoImportacoes.length === 0 ? (
+          {carregando ? (
+            <Skeleton className="h-24 w-full" />
+          ) : resumoImportacoes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sem dados.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead className="text-right">Boletos</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead className="text-right">Acima do limite</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {resumoImportacoes.map((r) => (
-                  <TableRow key={r.data}>
-                    <TableCell>{formatarData(r.data)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {r.quantidade}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatarMoeda(r.valor)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {r.excedidos}
-                    </TableCell>
+            <div className="overflow-x-auto scroll-thin">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead className="text-right">Boletos</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-right">Acima do limite</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {resumoImportacoes.map((r) => (
+                    <TableRow key={r.data}>
+                      <TableCell className="font-medium">{formatarData(r.data)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.quantidade}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatarMoeda(r.valor)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.excedidos > 0 ? (
+                          <span className="text-red-600 dark:text-red-400">{r.excedidos}</span>
+                        ) : (
+                          r.excedidos
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Boletos acima do limite</CardTitle>
+              <CardTitle className="text-base">Boletos acima do limite</CardTitle>
               <CardDescription>
                 {excedidos.length} boleto(s) · {pendentes} alerta(s) pendente(s)
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
-              {aviso && (
-                <span className="text-sm text-muted-foreground">{aviso}</span>
-              )}
-              <Button
-                onClick={enviarPendentes}
-                disabled={enviando || pendentes === 0}
-              >
+              {aviso && <span className="text-sm text-muted-foreground">{aviso}</span>}
+              <Button onClick={enviarPendentes} disabled={enviando || pendentes === 0}>
                 {enviando ? <Loader2 className="animate-spin" /> : <Send />}
                 Enviar alertas pendentes
               </Button>
@@ -314,79 +302,72 @@ export default function HistoricoPage() {
         </CardHeader>
         <CardContent>
           {carregando ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
-            </div>
+            <Skeleton className="h-40 w-full" />
           ) : excedidos.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Nenhum boleto acima do limite nos filtros atuais.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Empresa</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Sacado</TableHead>
-                  <TableHead>Nosso nº</TableHead>
-                  <TableHead>Entrada</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Prazo</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Alerta</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {excedidos.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell>{b.empresa || "—"}</TableCell>
-                    <TableCell>
-                      <span
-                        className="inline-flex max-w-[160px] truncate rounded-full bg-secondary px-2 py-0.5 text-xs"
-                        title={b.sacado}
-                      >
-                        {abreviarNome(b.sacado)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="max-w-[220px] truncate" title={b.sacado}>
-                      {b.sacado}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {b.nosso_numero || "—"}
-                    </TableCell>
-                    <TableCell>{formatarData(b.data_entrada)}</TableCell>
-                    <TableCell>{formatarData(b.data_vencimento)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {b.prazo_dias ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatarMoeda(b.valor)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={b.alerta_enviado ? "success" : "warning"}>
-                        {b.alerta_enviado ? "Enviado" : "Pendente"}
-                      </Badge>
-                    </TableCell>
+            <div className="overflow-x-auto scroll-thin">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Sacado</TableHead>
+                    <TableHead>Nosso nº</TableHead>
+                    <TableHead>Entrada</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead className="text-center">Prazo</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Alerta</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {excedidos.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: corEmpresa(b.empresa) }}
+                          />
+                          {b.empresa || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className="inline-flex max-w-[150px] truncate rounded-full bg-secondary px-2 py-0.5 text-xs"
+                          title={b.sacado}
+                        >
+                          {abreviarNome(b.sacado)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-[220px] truncate" title={b.sacado}>
+                        {b.sacado}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{b.nosso_numero || "—"}</TableCell>
+                      <TableCell>{formatarData(b.data_entrada)}</TableCell>
+                      <TableCell>{formatarData(b.data_vencimento)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="destructive">{b.prazo_dias ?? "—"}d</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {formatarMoeda(b.valor)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={b.alerta_enviado ? "success" : "warning"}>
+                          {b.alerta_enviado ? "Enviado" : "Pendente"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function Indicador({ titulo, valor }: { titulo: string; valor: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription>{titulo}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className={cn("text-2xl font-semibold tabular-nums")}>{valor}</div>
-      </CardContent>
-    </Card>
   );
 }

@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { Loader2, Plus, Trash2, Upload, CheckCircle2 } from "lucide-react";
+import {
+  CheckCircle2,
+  FileSpreadsheet,
+  Loader2,
+  Plus,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import {
@@ -14,7 +21,9 @@ import {
   formatarMoeda,
   type LinhaImportada,
 } from "@/lib/boletos";
+import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +34,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -58,6 +68,7 @@ export default function ImportacaoPage() {
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string>("");
+  const [arrastando, setArrastando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -168,13 +179,11 @@ export default function ImportacaoPage() {
       setAviso({ tipo: "erro", texto: "Nenhuma linha para importar." });
       return;
     }
-    const semEmpresa = linhas.some((l) => !l.empresa);
-    if (semEmpresa) {
+    if (linhas.some((l) => !l.empresa)) {
       setAviso({ tipo: "erro", texto: "Defina a empresa em todas as linhas." });
       return;
     }
-    const semDatas = linhas.some((l) => !l.data_entrada || !l.data_vencimento);
-    if (semDatas) {
+    if (linhas.some((l) => !l.data_entrada || !l.data_vencimento)) {
       setAviso({
         tipo: "erro",
         texto: "Preencha entrada e vencimento em todas as linhas.",
@@ -226,14 +235,11 @@ export default function ImportacaoPage() {
             pendentes: number;
             motivo: string;
           };
-          if (r.motivo === "ok") {
-            msgTelegram = ` ${r.enviados} alerta(s) enviado(s) no Telegram.`;
-          } else if (r.motivo === "sem_token") {
-            msgTelegram = " (Telegram sem token — alertas ficaram pendentes.)";
-          } else if (r.motivo === "sem_destinatarios") {
-            msgTelegram =
-              " (Nenhum destinatário no Telegram — cadastre em Configurações.)";
-          }
+          if (r.motivo === "ok") msgTelegram = ` ${r.enviados} alerta(s) enviado(s) no Telegram.`;
+          else if (r.motivo === "sem_token")
+            msgTelegram = " (Telegram sem token — alertas pendentes.)";
+          else if (r.motivo === "sem_destinatarios")
+            msgTelegram = " (Sem destinatários no Telegram — cadastre em Configurações.)";
         } catch {
           msgTelegram = " (Falha ao disparar alertas do Telegram.)";
         }
@@ -264,254 +270,276 @@ export default function ImportacaoPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Importação</h1>
-        <p className="text-sm text-muted-foreground">
-          Importe o relatório do Sicoob (.xlsx ou .pdf), confira as linhas e
-          confirme para registrar os boletos.
-        </p>
-      </div>
+      <PageHeader
+        title="Importação"
+        description="Importe o relatório do Sicoob (.xlsx ou .pdf), confira as linhas e confirme para registrar os boletos."
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Novo relatório</CardTitle>
-          <CardDescription>
-            Selecione a empresa das linhas importadas e envie o arquivo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Empresa das linhas importadas</Label>
-              <Select value={empresaPadrao} onValueChange={setEmpresaPadrao}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {EMPRESAS.map((e) => (
-                    <SelectItem key={e} value={e}>
-                      {e}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Relatório Sicoob (.xlsx ou .pdf)</Label>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) processarArquivo(f);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => inputRef.current?.click()}
-                  disabled={processando}
-                >
-                  {processando ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Upload />
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Empresa</CardTitle>
+            <CardDescription>Aplicada às linhas importadas.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {EMPRESAS.map((e) => {
+              const ativo = empresaPadrao === e;
+              return (
+                <button
+                  key={e}
+                  onClick={() => setEmpresaPadrao(e)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                    ativo
+                      ? "border-primary/40 bg-primary/5"
+                      : "border-border hover:bg-accent"
                   )}
-                  Selecionar arquivo
-                </Button>
-                {nomeArquivo && (
-                  <span className="truncate text-sm text-muted-foreground">
-                    {nomeArquivo}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+                >
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ background: corEmpresa(e) }}
+                  />
+                  {e}
+                  {ativo && <CheckCircle2 className="ml-auto h-4 w-4 text-primary" />}
+                </button>
+              );
+            })}
+          </CardContent>
+        </Card>
 
-          {aviso && (
-            <div
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Relatório Sicoob</CardTitle>
+            <CardDescription>Arraste o arquivo ou clique para selecionar (.xlsx ou .pdf).</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".xlsx,.xls,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) processarArquivo(f);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setArrastando(true);
+              }}
+              onDragLeave={() => setArrastando(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setArrastando(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) processarArquivo(f);
+              }}
               className={cn(
-                "rounded-md border px-3 py-2 text-sm",
-                aviso.tipo === "ok" &&
-                  "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
-                aviso.tipo === "erro" &&
-                  "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
-                aviso.tipo === "info" &&
-                  "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors",
+                arrastando
+                  ? "border-brand bg-brand/5"
+                  : "border-border hover:border-brand/50 hover:bg-accent/50"
               )}
             >
-              {aviso.texto}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {processando ? (
+                <Loader2 className="h-8 w-8 animate-spin text-brand" />
+              ) : (
+                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+              )}
+              <span className="text-sm font-medium">
+                {processando ? "Processando…" : "Solte o arquivo aqui ou clique"}
+              </span>
+              {nomeArquivo && !processando && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> {nomeArquivo}
+                </span>
+              )}
+            </button>
+
+            {aviso && (
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-sm",
+                  aviso.tipo === "ok" &&
+                    "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+                  aviso.tipo === "erro" &&
+                    "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
+                  aviso.tipo === "info" &&
+                    "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                )}
+              >
+                {aviso.texto}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {linhas.length > 0 && (
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>Conferência</CardTitle>
-                <CardDescription>
-                  {linhas.length} linha(s) · {formatarMoeda(totalValor)} ·{" "}
-                  {totalExcedidos} acima do limite ({limite} dias)
+                <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>{linhas.length} linha(s)</span>
+                  <span className="text-border">•</span>
+                  <span className="font-medium text-foreground">{formatarMoeda(totalValor)}</span>
+                  <span className="text-border">•</span>
+                  <span className={totalExcedidos > 0 ? "text-red-600 dark:text-red-400" : ""}>
+                    {totalExcedidos} acima do limite ({limite} dias)
+                  </span>
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={adicionarLinha}>
-                  <Plus /> Adicionar linha
+                  <Plus /> Adicionar
                 </Button>
                 <Button onClick={confirmarImportacao} disabled={salvando}>
-                  {salvando ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <CheckCircle2 />
-                  )}
+                  {salvando ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
                   Confirmar importação
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[140px]">Empresa</TableHead>
-                  <TableHead className="min-w-[200px]">Sacado</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Nosso nº</TableHead>
-                  <TableHead>Seu nº</TableHead>
-                  <TableHead>Entrada</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead className="text-right">Prazo</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {linhas.map((l) => {
-                  const excede = l.prazo_dias != null && l.prazo_dias > limite;
-                  const dentro = l.prazo_dias != null && l.prazo_dias <= limite;
-                  return (
-                    <TableRow
-                      key={l._id}
-                      className={cn(
-                        excede &&
-                          "bg-red-50 hover:bg-red-100/70 dark:bg-red-950/30",
-                        dentro &&
-                          "bg-emerald-50 hover:bg-emerald-100/70 dark:bg-emerald-950/20"
-                      )}
-                    >
-                      <TableCell>
-                        <Select
-                          value={l.empresa || undefined}
-                          onValueChange={(v) => atualizarLinha(l._id, { empresa: v })}
-                        >
-                          <SelectTrigger className="h-8">
-                            <SelectValue placeholder="—" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {EMPRESAS.map((e) => (
-                              <SelectItem key={e} value={e}>
-                                {e}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          className="h-8"
-                          value={l.sacado}
-                          onChange={(e) =>
-                            atualizarLinha(l._id, { sacado: e.target.value })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className="inline-flex max-w-[160px] truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
-                          title={l.sacado}
-                        >
-                          {abreviarNome(l.sacado)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          className="h-8 w-28"
-                          value={l.nosso_numero}
-                          onChange={(e) =>
-                            atualizarLinha(l._id, { nosso_numero: e.target.value })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          className="h-8 w-28"
-                          value={l.seu_numero}
-                          onChange={(e) =>
-                            atualizarLinha(l._id, { seu_numero: e.target.value })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="date"
-                          className="h-8 w-36"
-                          value={l.data_entrada ?? ""}
-                          onChange={(e) =>
-                            atualizarLinha(l._id, {
-                              data_entrada: e.target.value || null,
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="date"
-                          className="h-8 w-36"
-                          value={l.data_vencimento ?? ""}
-                          onChange={(e) =>
-                            atualizarLinha(l._id, {
-                              data_vencimento: e.target.value || null,
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          className="h-8 w-28 text-right"
-                          value={Number.isFinite(l.valor) ? l.valor : 0}
-                          onChange={(e) =>
-                            atualizarLinha(l._id, {
-                              valor: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {l.prazo_dias ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removerLinha(l._id)}
-                          aria-label="Remover linha"
-                        >
-                          <Trash2 className="text-muted-foreground" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto scroll-thin">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[150px]">Empresa</TableHead>
+                    <TableHead className="min-w-[200px]">Sacado</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Nosso nº</TableHead>
+                    <TableHead>Seu nº</TableHead>
+                    <TableHead>Entrada</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-center">Prazo</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {linhas.map((l) => {
+                    const excede = l.prazo_dias != null && l.prazo_dias > limite;
+                    const dentro = l.prazo_dias != null && l.prazo_dias <= limite;
+                    return (
+                      <TableRow
+                        key={l._id}
+                        className={cn(
+                          excede && "bg-red-50/70 hover:bg-red-100/60 dark:bg-red-950/20",
+                          dentro && "bg-emerald-50/60 hover:bg-emerald-100/50 dark:bg-emerald-950/15"
+                        )}
+                      >
+                        <TableCell>
+                          <Select
+                            value={l.empresa || undefined}
+                            onValueChange={(v) => atualizarLinha(l._id, { empresa: v })}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EMPRESAS.map((e) => (
+                                <SelectItem key={e} value={e}>
+                                  {e}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            className="h-8 min-w-[180px]"
+                            value={l.sacado}
+                            onChange={(e) => atualizarLinha(l._id, { sacado: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className="inline-flex max-w-[150px] items-center gap-1.5 truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
+                            title={l.sacado}
+                          >
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ background: corEmpresa(l.empresa) }}
+                            />
+                            {abreviarNome(l.sacado)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            className="h-8 w-28 font-mono text-xs"
+                            value={l.nosso_numero}
+                            onChange={(e) => atualizarLinha(l._id, { nosso_numero: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            className="h-8 w-28 font-mono text-xs"
+                            value={l.seu_numero}
+                            onChange={(e) => atualizarLinha(l._id, { seu_numero: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="date"
+                            className="h-8 w-[8.5rem]"
+                            value={l.data_entrada ?? ""}
+                            onChange={(e) =>
+                              atualizarLinha(l._id, { data_entrada: e.target.value || null })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="date"
+                            className="h-8 w-[8.5rem]"
+                            value={l.data_vencimento ?? ""}
+                            onChange={(e) =>
+                              atualizarLinha(l._id, { data_vencimento: e.target.value || null })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="h-8 w-28 text-right tabular-nums"
+                            value={Number.isFinite(l.valor) ? l.valor : 0}
+                            onChange={(e) =>
+                              atualizarLinha(l._id, { valor: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {l.prazo_dias == null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <Badge variant={excede ? "destructive" : "success"}>
+                              {l.prazo_dias}d
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removerLinha(l._id)}
+                            aria-label="Remover linha"
+                          >
+                            <Trash2 className="text-muted-foreground" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

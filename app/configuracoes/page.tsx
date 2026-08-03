@@ -5,6 +5,7 @@ import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -106,12 +107,10 @@ export default function ConfiguracoesPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
-        <p className="text-sm text-muted-foreground">
-          Defina o limite de prazo e os destinatários dos alertas no Telegram.
-        </p>
-      </div>
+      <PageHeader
+        title="Configurações"
+        description="Defina o limite de prazo e os destinatários dos alertas no Telegram."
+      />
 
       <Card>
         <CardHeader>
