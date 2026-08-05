@@ -17,6 +17,7 @@ import {
   EMPRESAS,
   abreviarNome,
   calcularPrazoDias,
+  detectarEmpresa,
   extrairDeMatriz,
   extrairDeTexto,
   formatarMoeda,
@@ -86,57 +87,89 @@ export default function ImportacaoPage() {
       });
   }, []);
 
-  async function processarArquivo(file: File) {
+  // Empresa pelo nome do arquivo (fallback quando o conteúdo não identifica).
+  function empresaPeloNome(nome: string): string | null {
+    const n = nome.toLowerCase();
+    if (/(^|[^a-z])lc([^a-z]|$)|colcho/.test(n)) return "Ley Colchões";
+    if (/(^|[^a-z])lm([^a-z]|$)|move/.test(n)) return "Ley Móveis";
+    return null;
+  }
+
+  async function processarArquivos(files: FileList) {
     setProcessando(true);
     setAviso(null);
-    setNomeArquivo(file.name);
+    const nomes = Array.from(files).map((f) => f.name);
+    setNomeArquivo(nomes.join(", "));
     try {
-      const nome = file.name.toLowerCase();
-      let extraidas: LinhaImportada[] = [];
+      const acumuladas: LinhaEditavel[] = [];
+      let ignorados = 0;
 
-      if (nome.endsWith(".xlsx") || nome.endsWith(".xls")) {
-        const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array", cellDates: true });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const matriz = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-          header: 1,
-          raw: true,
-          defval: "",
-        });
-        extraidas = extrairDeMatriz(matriz, empresaPadrao);
-      } else if (nome.endsWith(".pdf")) {
-        const base64 = await lerComoBase64(file);
-        const resp = await fetch("/api/parse-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pdf: base64 }),
-        });
-        if (!resp.ok) throw new Error("Falha ao ler o PDF no servidor.");
-        const { texto } = (await resp.json()) as { texto: string };
-        extraidas = extrairDeTexto(texto, empresaPadrao);
-      } else {
-        setAviso({ tipo: "erro", texto: "Formato não suportado. Use .xlsx ou .pdf." });
-        return;
+      for (const file of Array.from(files)) {
+        const nome = file.name.toLowerCase();
+        let texto = "";
+        let extraidas: LinhaImportada[] = [];
+
+        if (nome.endsWith(".xlsx") || nome.endsWith(".xls")) {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: "array", cellDates: true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const matriz = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+            header: 1,
+            raw: true,
+            defval: "",
+          });
+          texto = matriz
+            .slice(0, 30)
+            .map((r) => (Array.isArray(r) ? r.join(" ") : ""))
+            .join(" ");
+          const empresa =
+            detectarEmpresa(texto) || empresaPeloNome(file.name) || empresaPadrao;
+          extraidas = extrairDeMatriz(matriz, empresa);
+        } else if (nome.endsWith(".pdf")) {
+          const base64 = await lerComoBase64(file);
+          const resp = await fetch("/api/parse-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pdf: base64 }),
+          });
+          if (!resp.ok) throw new Error("Falha ao ler o PDF no servidor.");
+          const dados = (await resp.json()) as { texto: string };
+          texto = dados.texto;
+          const empresa =
+            detectarEmpresa(texto) || empresaPeloNome(file.name) || empresaPadrao;
+          extraidas = extrairDeTexto(texto, empresa);
+        } else {
+          ignorados++;
+          continue;
+        }
+
+        for (const l of extraidas) acumuladas.push({ ...l, _id: novoId() });
       }
 
-      const editaveis = extraidas.map((l) => ({ ...l, _id: novoId() }));
-      setLinhas(editaveis);
+      setLinhas(acumuladas);
 
-      if (editaveis.length === 0) {
+      if (acumuladas.length === 0) {
         setAviso({
           tipo: "info",
           texto:
-            "Nenhuma linha reconhecida automaticamente. Confira o arquivo ou adicione as linhas manualmente.",
+            ignorados > 0
+              ? "Formato não suportado. Use .xlsx ou .pdf."
+              : "Nenhuma linha reconhecida automaticamente. Confira o arquivo ou adicione as linhas manualmente.",
         });
       } else {
+        const empresasDetectadas = Array.from(
+          new Set(acumuladas.map((l) => l.empresa).filter(Boolean))
+        );
         setAviso({
           tipo: "ok",
-          texto: `${editaveis.length} linha(s) extraída(s). Confira e ajuste antes de importar.`,
+          texto: `${acumuladas.length} linha(s) de ${files.length} arquivo(s)${
+            empresasDetectadas.length ? ` · ${empresasDetectadas.join(", ")}` : ""
+          }. Confira e ajuste antes de importar.`,
         });
       }
     } catch (err) {
       console.error(err);
-      setAviso({ tipo: "erro", texto: "Erro ao processar o arquivo." });
+      setAviso({ tipo: "erro", texto: "Erro ao processar os arquivos." });
     } finally {
       setProcessando(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -349,14 +382,17 @@ export default function ImportacaoPage() {
     <div className="space-y-6">
       <PageHeader
         title="Importação"
-        description="Importe o relatório do Sicoob (.xlsx ou .pdf), confira as linhas e confirme para registrar os boletos."
+        description="Solte os relatórios dos bancos (.xlsx ou .pdf). O sistema reconhece o banco e a empresa automaticamente."
       />
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Empresa</CardTitle>
-            <CardDescription>Aplicada às linhas importadas.</CardDescription>
+            <CardTitle className="text-base">Empresa (padrão)</CardTitle>
+            <CardDescription>
+              Usada só quando o sistema não identificar a empresa pelo próprio
+              relatório.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {EMPRESAS.map((e) => {
@@ -386,18 +422,21 @@ export default function ImportacaoPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Relatório Sicoob</CardTitle>
-            <CardDescription>Arraste o arquivo ou clique para selecionar (.xlsx ou .pdf).</CardDescription>
+            <CardTitle className="text-base">Relatórios dos bancos</CardTitle>
+            <CardDescription>
+              Sicoob e Itaú (.xlsx ou .pdf). Reconhece o banco e a empresa
+              sozinho — pode soltar vários de uma vez.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <input
               ref={inputRef}
               type="file"
               accept=".xlsx,.xls,.pdf"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) processarArquivo(f);
+                if (e.target.files?.length) processarArquivos(e.target.files);
               }}
             />
             <button
@@ -411,8 +450,8 @@ export default function ImportacaoPage() {
               onDrop={(e) => {
                 e.preventDefault();
                 setArrastando(false);
-                const f = e.dataTransfer.files?.[0];
-                if (f) processarArquivo(f);
+                if (e.dataTransfer.files?.length)
+                  processarArquivos(e.dataTransfer.files);
               }}
               className={cn(
                 "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors",
@@ -427,7 +466,9 @@ export default function ImportacaoPage() {
                 <UploadCloud className="h-8 w-8 text-muted-foreground" />
               )}
               <span className="text-sm font-medium">
-                {processando ? "Processando…" : "Solte o arquivo aqui ou clique"}
+                {processando
+                  ? "Processando…"
+                  : "Solte os arquivos aqui ou clique"}
               </span>
               {nomeArquivo && !processando && (
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

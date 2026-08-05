@@ -185,6 +185,18 @@ export function abreviarNome(nome: string): string {
   return base.slice(0, 2).join(" ");
 }
 
+/**
+ * Tenta descobrir a empresa (Ley Móveis / Ley Colchões) pelo conteúdo do
+ * relatório — ex.: o Sicoob traz "Cedente: ... LEY MOVEIS LTDA" ou
+ * "LEY INDUSTRIA DE COLCHOES LTDA". Devolve null se não reconhecer.
+ */
+export function detectarEmpresa(texto: string): string | null {
+  const t = removerAcentos(String(texto ?? "").toLowerCase());
+  if (/colcho|colchoa/.test(t)) return "Ley Colchões";
+  if (/\bmoveis\b|ley moveis/.test(t)) return "Ley Móveis";
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Extração a partir da matriz do XLSX (SheetJS header:1)
 // ---------------------------------------------------------------------------
