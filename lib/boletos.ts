@@ -313,41 +313,56 @@ export function extrairDeMatriz(
 }
 
 // ---------------------------------------------------------------------------
-// Extração a partir do texto do PDF
+// Extração a partir do texto do PDF (Sicoob e Itaú)
 // ---------------------------------------------------------------------------
 
-// Registro do relatório Sicoob no texto do PDF. Ex. (campos podem vir colados):
+// Registro do relatório Sicoob. Ex. (campos podem vir colados):
 //   253-9 421735-0148281 PATRICIO ANTONIO BARBOSA - ME 31/07/2026 1.797,0003/08/2026
 // Grupos: (1) números (nosso/seu), (2) sacado, (3) entrada, (4) valor, (5) vencimento.
-const RE_REGISTRO_PDF =
+const RE_SICOOB =
   /(\d[\d-]*(?:\s+\d[\d-]*)*)\s+(-?\s*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,&/'-]*?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{2}\/\d{2}\/\d{4})/g;
 
+// Registro do relatório Itaú ("movimentações de cobrança"). Ex.:
+//   157 41033 ALEXANDRE PEREIRA COM DE 37.023.123/0001-58 boleto 18061 53893-3 05/08/2026 07/11/2026 2466,89 a vencer
+// Colunas: carteira, código, NOME, CPF/CNPJ, tipo, nosso, seu, emissão, venc, valor, status.
+// Grupos: (1) sacado, (2) nosso, (3) seu, (4) emissão, (5) vencimento, (6) valor.
+const RE_ITAU =
+  /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .,&/'-]*?)\s+(?:\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2})\s+\S+\s+(\d+)\s+([\w-]+)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d[\d.]*,\d{1,2})\s+(?:a vencer|vencido|pago|baixado|em aberto|em cart[oó]rio|protestado)/gi;
+
+function ehItau(s: string): boolean {
+  return /movimenta[çc][õo]es de cobran[çc]a|cpf\/cnpj pagador|valor t[ií]tulo/i.test(
+    s
+  );
+}
+
 /**
- * Extrai as linhas do texto puro do PDF do relatório Sicoob.
- *
- * O extrator do PDF concatena todo o conteúdo (sem quebras de linha) e cola
- * alguns campos: valor+vencimento ("1.797,0003/08/2026") e nosso+seu número
- * ("421735-0148281"). Primeiro "descolamos" esses campos e então varremos os
- * registros por regex: números, sacado, entrada, valor e vencimento.
+ * Extrai as linhas do texto puro do PDF. Detecta automaticamente o banco
+ * (Sicoob ou Itaú) e usa o parser correspondente.
  */
 export function extrairDeTexto(texto: string, empresaPadrao = ""): LinhaImportada[] {
   if (!texto) return [];
+  const s0 = texto.replace(/\s+/g, " ");
+  if (ehItau(s0)) return extrairItau(s0, empresaPadrao);
+  return extrairSicoob(s0, empresaPadrao);
+}
 
-  let s = texto.replace(/\s+/g, " ");
-  // Descola valor colado no vencimento: "1.797,0003/08/2026" -> "... ,00 03/08/2026".
-  s = s.replace(/(,\d{2})(\d{2}\/\d{2}\/\d{4})/g, "$1 $2");
-  // Descola nosso número colado no seu número: "421735-0148281" -> "421735-01 48281".
+/**
+ * Sicoob: o extrator do PDF concatena tudo (sem quebras) e cola alguns campos —
+ * valor+vencimento ("1.797,0003/08/2026") e nosso+seu número ("421735-0148281").
+ * Descolamos esses campos e então varremos os registros por regex.
+ */
+function extrairSicoob(s0: string, empresaPadrao: string): LinhaImportada[] {
+  let s = s0.replace(/(,\d{2})(\d{2}\/\d{2}\/\d{4})/g, "$1 $2");
   s = s.replace(/(-\d{2})(\d{4,})/g, "$1 $2");
 
   const linhas: LinhaImportada[] = [];
   let m: RegExpExecArray | null;
-  RE_REGISTRO_PDF.lastIndex = 0;
+  RE_SICOOB.lastIndex = 0;
 
-  while ((m = RE_REGISTRO_PDF.exec(s)) !== null) {
+  while ((m = RE_SICOOB.exec(s)) !== null) {
     const tokens = m[1].trim().split(/\s+/);
     const nosso_numero = tokens[0] ?? "";
     const seu_numero = tokens.slice(1).join(" ");
-
     const sacado = m[2].replace(/^[-\s]+/, "").replace(/\s+/g, " ").trim();
     const entrada = parseData(m[3]);
     const valor = parseValor(m[4]);
@@ -364,6 +379,36 @@ export function extrairDeTexto(texto: string, empresaPadrao = ""): LinhaImportad
       prazo_dias: calcularPrazoDias(entrada, vencimento),
     });
   }
+  return linhas;
+}
 
+/**
+ * Itaú: "movimentações de cobrança". Layout tabular, campos separados; os
+ * valores não têm separador de milhar e podem ter 1 ou 2 casas decimais.
+ */
+function extrairItau(s: string, empresaPadrao: string): LinhaImportada[] {
+  const linhas: LinhaImportada[] = [];
+  let m: RegExpExecArray | null;
+  RE_ITAU.lastIndex = 0;
+
+  while ((m = RE_ITAU.exec(s)) !== null) {
+    const sacado = m[1].replace(/^[-\s]+/, "").replace(/\s+/g, " ").trim();
+    const nosso_numero = m[2];
+    const seu_numero = m[3];
+    const entrada = parseData(m[4]);
+    const vencimento = parseData(m[5]);
+    const valor = parseValor(m[6]);
+
+    linhas.push({
+      empresa: empresaPadrao,
+      sacado,
+      nosso_numero,
+      seu_numero,
+      data_entrada: entrada,
+      data_vencimento: vencimento,
+      valor,
+      prazo_dias: calcularPrazoDias(entrada, vencimento),
+    });
+  }
   return linhas;
 }
