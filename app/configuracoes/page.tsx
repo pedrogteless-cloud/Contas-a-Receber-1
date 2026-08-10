@@ -214,8 +214,7 @@ export default function ConfiguracoesPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Acesso</CardTitle>
           <CardDescription>
-            Sair encerra a sessão neste dispositivo (só tem efeito se o login por
-            senha estiver ativado).
+            Encerra a sessão neste dispositivo.
           </CardDescription>
         </CardHeader>
         <CardContent>

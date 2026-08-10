@@ -1,25 +1,30 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const COOKIE = "cr1_auth";
+const COOKIE = "cr1_sess";
 
 /**
- * Proteção por senha compartilhada. Ativa somente quando APP_SENHA está
- * definida; sem ela, o app fica aberto (evita travar o deploy antes de
- * configurar). A senha fica no cookie httpOnly (só trafega para o servidor).
+ * Protege o app quando o login está configurado (ADMIN_USUARIO + ADMIN_SENHA).
+ * Faz apenas a checagem barata: existe cookie de sessão? A validação da
+ * assinatura acontece nos route handlers/páginas (Node), que têm acesso ao
+ * segredo e ao banco.
  */
 export function middleware(req: NextRequest) {
-  const senha = process.env.APP_SENHA;
-  if (!senha) return NextResponse.next();
+  const loginAtivo =
+    Boolean(process.env.ADMIN_USUARIO) && Boolean(process.env.ADMIN_SENHA);
+  if (!loginAtivo) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  if (pathname === "/login" || pathname === "/api/login") {
+  if (
+    pathname === "/login" ||
+    pathname === "/api/login" ||
+    pathname === "/api/logout" ||
+    pathname === "/api/sessao"
+  ) {
     return NextResponse.next();
   }
 
-  if (req.cookies.get(COOKIE)?.value === senha) {
-    return NextResponse.next();
-  }
+  if (req.cookies.get(COOKIE)?.value) return NextResponse.next();
 
   const url = req.nextUrl.clone();
   url.pathname = "/login";

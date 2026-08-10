@@ -308,6 +308,16 @@ export default function ImportacaoPage() {
         }
       }
 
+      // Trilha de auditoria (não bloqueia a importação se falhar).
+      fetch("/api/auditoria", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          acao: "importacao",
+          detalhe: `${registros.length} boleto(s) importado(s), ${ignorados} ignorado(s), ${idsExcedidos.length} acima do limite.`,
+        }),
+      }).catch(() => {});
+
       setLinhas([]);
       setNomeArquivo("");
       setAviso({
