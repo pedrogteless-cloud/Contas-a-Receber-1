@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { type Boleto } from "@/lib/boletos";
 import {
-  chaveVenda,
-  formatarData,
-  formatarMoeda,
-  type Boleto,
-} from "@/lib/boletos";
+  agruparParaTelegram,
+  linhaVenda,
+  moedaCurta,
+  type VendaResumida,
+} from "@/lib/telegram-formato";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,44 +20,50 @@ interface Resultado {
   motivo: Motivo;
 }
 
+/** O Telegram corta em 4096 caracteres; paramos antes, com folga. */
+const MAX_CARACTERES = 3500;
+
+interface Lote {
+  texto: string;
+  ids: string[];
+}
+
 /**
- * Monta UMA mensagem por venda. Uma venda de R$ 10.000 em 4x gera um único
- * alerta com as parcelas listadas, em vez de quatro avisos separados.
+ * Junta TODAS as vendas acima do limite num aviso só — ou em poucos, quando a
+ * lista é longa demais para uma mensagem.
+ *
+ * Antes saía uma mensagem comprida por venda, com todas as parcelas listadas.
+ * Como a importação acontece no fim do expediente, isso enchia o grupo de
+ * blocos que ninguém conseguia ler de relance.
  */
-function montarMensagem(grupo: Boleto[], limite: number): string {
-  const ordenado = [...grupo].sort((a, b) =>
-    (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
-  );
-  const primeiro = ordenado[0];
-  const total = ordenado.reduce((s, b) => s + (b.valor ?? 0), 0);
-  const prazoRecebimento =
-    primeiro.prazo_recebimento ??
-    Math.max(...ordenado.map((b) => b.prazo_dias ?? 0));
+function montarLotes(vendas: VendaResumida[], limite: number): Lote[] {
+  const lotes: Lote[] = [];
+  let bloco: VendaResumida[] = [];
+  let tamanho = 0;
 
-  const linhas = [
-    "🔴 Venda acima do limite de prazo",
-    "",
-    `🏢 Empresa: ${primeiro.empresa || "—"}`,
-    `👤 Cliente: ${primeiro.sacado || "—"}`,
-    `📄 Documento: ${primeiro.documento || primeiro.seu_numero || "—"}`,
-    `💰 Valor total: ${formatarMoeda(total)}`,
-    `📅 Entrada: ${formatarData(primeiro.data_entrada)}`,
-    `⏳ Prazo de recebimento: ${prazoRecebimento} dias (limite ${limite})`,
-    "",
-    ordenado.length > 1
-      ? `📆 ${ordenado.length} parcelas:`
-      : "📆 Parcela única:",
-  ];
-
-  for (const [i, b] of ordenado.entries()) {
-    linhas.push(
-      `   ${i + 1}/${ordenado.length} · ${formatarData(b.data_vencimento)} · ${formatarMoeda(
-        b.valor
-      )} · ${b.prazo_dias ?? "—"}d`
-    );
+  function fechar() {
+    if (bloco.length === 0) return;
+    const total = bloco.reduce((s, v) => s + v.valorTotal, 0);
+    const titulo = `🔴 ${bloco.length} venda${
+      bloco.length > 1 ? "s" : ""
+    } acima de ${limite} dias · ${moedaCurta(total)}`;
+    lotes.push({
+      texto: [titulo, "", ...bloco.map(linhaVenda)].join("\n"),
+      ids: bloco.flatMap((v) => v.ids),
+    });
+    bloco = [];
+    tamanho = 0;
   }
 
-  return linhas.join("\n");
+  for (const v of vendas) {
+    const linha = linhaVenda(v);
+    if (bloco.length > 0 && tamanho + linha.length > MAX_CARACTERES) fechar();
+    bloco.push(v);
+    tamanho += linha.length + 1;
+  }
+  fechar();
+
+  return lotes;
 }
 
 async function enviarTelegram(
@@ -87,9 +94,9 @@ async function enviarTelegram(
 }
 
 /**
- * Dispara alertas para as VENDAS que excederam o limite e ainda não foram
- * avisadas. Marca `alerta_enviado = true` em todas as parcelas da venda apenas
- * quando todos os envios derem certo. Nunca reenvia.
+ * Dispara os alertas das VENDAS que excederam o limite e ainda não foram
+ * avisadas. Marca `alerta_enviado = true` apenas quando todos os envios do
+ * lote deram certo. Nunca reenvia.
  *
  * Body opcional: { ids?: string[] } para restringir a boletos específicos.
  */
@@ -156,38 +163,25 @@ export async function POST(req: Request) {
     return NextResponse.json(resultado);
   }
 
-  // Agrupa as parcelas por venda: um alerta por venda.
-  const vendas = new Map<string, Boleto[]>();
-  for (const b of pendentesBoletos) {
-    const chave = chaveVenda(b);
-    if (!vendas.has(chave)) vendas.set(chave, []);
-    vendas.get(chave)!.push(b);
-  }
-
+  const vendas = agruparParaTelegram(pendentesBoletos);
   let enviados = 0;
 
-  for (const grupo of vendas.values()) {
-    const texto = montarMensagem(grupo, limite);
-
+  for (const lote of montarLotes(vendas, limite)) {
     let todosOk = true;
     for (const chatId of chatIds) {
-      const ok = await enviarTelegram(token, chatId, texto);
+      const ok = await enviarTelegram(token, chatId, lote.texto);
       if (!ok) todosOk = false;
     }
+    if (!todosOk) continue;
 
-    if (todosOk) {
-      const { error: updErr } = await supabase
-        .from("boletos")
-        .update({ alerta_enviado: true })
-        .in(
-          "id",
-          grupo.map((b) => b.id)
-        );
-      if (updErr) {
-        console.error("[telegram] erro ao marcar alerta_enviado:", updErr);
-      } else {
-        enviados += grupo.length;
-      }
+    const { error: updErr } = await supabase
+      .from("boletos")
+      .update({ alerta_enviado: true })
+      .in("id", lote.ids);
+    if (updErr) {
+      console.error("[telegram] erro ao marcar alerta_enviado:", updErr);
+    } else {
+      enviados += lote.ids.length;
     }
   }
 

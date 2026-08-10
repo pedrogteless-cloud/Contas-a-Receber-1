@@ -87,6 +87,30 @@ export function dataPorExtenso(d: Date = new Date()): string {
   } de ${d.getFullYear()}`;
 }
 
+/**
+ * Data de hoje (yyyy-mm-dd) no fuso de BRASÍLIA, independente do fuso do
+ * servidor. O resumo diário roda na Vercel, que usa UTC: sem isto, um envio
+ * feito depois das 21h de Brasília já contaria como o dia seguinte e o resumo
+ * sairia vazio, porque a importação foi gravada com a data local do navegador.
+ */
+export function hojeBrasilia(d: Date = new Date()): string {
+  // "en-CA" formata como yyyy-mm-dd.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** "seg, 10 ago" a partir de uma data ISO, sem depender do fuso do servidor. */
+export function dataCurtaISO(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split("-").map(Number);
+  if (!ano || !mes || !dia) return iso;
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  return `${DIAS_SEMANA[d.getUTCDay()].slice(0, 3)}, ${dia} ${MESES[mes - 1].slice(0, 3)}`;
+}
+
 /** "seg, 10 ago" — versão curta para o cabeçalho. */
 export function dataCurta(d: Date = new Date()): string {
   const dia = DIAS_SEMANA[d.getDay()].slice(0, 3);

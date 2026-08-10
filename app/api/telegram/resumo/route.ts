@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { agruparVendas, prazoMedioPonderado, valorTotal } from "@/lib/analytics";
-import { formatarMoeda, type Boleto } from "@/lib/boletos";
-import { dataPorExtenso, diasAte, hojeISO } from "@/lib/tempo";
+import { prazoMedioPonderado, valorTotal } from "@/lib/analytics";
+import { type Boleto } from "@/lib/boletos";
+import { dataCurtaISO, diasAte, hojeBrasilia } from "@/lib/tempo";
+import {
+  agruparParaTelegram,
+  diasCurto,
+  moedaCurta,
+} from "@/lib/telegram-formato";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Resumo diário da carteira, enviado ao grupo do Telegram.
+ * Fechamento do dia, enviado ao grupo do Telegram às 18h de Brasília
+ * (o cron da Vercel roda em UTC: 21h UTC = 18h BRT).
  *
  * Pode ser disparado de dois jeitos:
  *  - pelo agendamento da Vercel (header Authorization: Bearer <CRON_SECRET>);
@@ -26,77 +32,75 @@ function autorizado(req: Request): boolean {
   return Boolean(sessaoAtual());
 }
 
-function montarResumo(boletos: Boleto[], limite: number): string {
-  const hoje = hojeISO();
+/**
+ * O resumo é sobre O DIA: quanto foi importado, que prazo foi concedido hoje e
+ * quais vendas puxaram esse prazo para cima. A carteira inteira entra só como
+ * uma linha de contexto no rodapé.
+ */
+function montarResumo(boletos: Boleto[], limite: number, hoje: string): string {
+  const doDia = boletos.filter((b) => b.data_importacao === hoje);
+  const vendasDoDia = agruparParaTelegram(doDia);
 
-  const importadosHoje = boletos.filter((b) => b.data_importacao === hoje);
-  const vendasHoje = agruparVendas(importadosHoje, limite);
-  const vendasHojeAcima = vendasHoje.filter((v) => v.acimaLimite > 0);
+  const linhas: string[] = [`📊 Fechamento do dia · ${dataCurtaISO(hoje)}`, ""];
 
-  const carteira = valorTotal(boletos);
+  if (doDia.length === 0) {
+    linhas.push("Nenhuma importação hoje.");
+  } else {
+    const prazoDoDia = prazoMedioPonderado(doDia);
+    const acima = vendasDoDia.filter(
+      (v) => v.prazo != null && v.prazo > limite
+    );
+
+    linhas.push(
+      `📥 ${vendasDoDia.length} venda${
+        vendasDoDia.length > 1 ? "s" : ""
+      } · ${doDia.length} boleto${doDia.length > 1 ? "s" : ""} · ${moedaCurta(
+        valorTotal(doDia)
+      )}`,
+      `⏳ Prazo médio dado hoje: ${
+        prazoDoDia != null ? `${diasCurto(prazoDoDia)} dias` : "—"
+      }`,
+      acima.length > 0
+        ? `🔴 ${acima.length} acima de ${limite}d · ${moedaCurta(
+            acima.reduce((s, v) => s + v.valorTotal, 0)
+          )}`
+        : `🟢 Nenhuma acima de ${limite}d`
+    );
+
+    // agruparParaTelegram já devolve ordenado do maior prazo para o menor.
+    const destaques = vendasDoDia.filter((v) => v.prazo != null).slice(0, 3);
+    if (destaques.length > 0) {
+      linhas.push("", "🔝 Maiores prazos de hoje");
+      destaques.forEach((v, i) => {
+        linhas.push(
+          `${i + 1}. ${v.sacado} · ${v.empresa} · ${moedaCurta(
+            v.valorTotal
+          )} · ${v.prazo}d`
+        );
+      });
+    }
+  }
+
+  // Rodapé: a carteira toda em uma linha, para não perder a visão do conjunto.
   const pmr = prazoMedioPonderado(boletos);
+  const proximos7 = boletos.filter((b) => {
+    const d = diasAte(b.data_vencimento, hoje);
+    return d != null && d >= 0 && d <= 7;
+  });
+  linhas.push(
+    "",
+    `📦 Carteira ${moedaCurta(valorTotal(boletos))} · PMR ${
+      pmr != null ? `${diasCurto(pmr)}d` : "—"
+    } · ${proximos7.length} vence(m) em 7d`
+  );
 
   const vencidos = boletos.filter((b) => {
     const d = diasAte(b.data_vencimento, hoje);
     return d != null && d < 0;
   });
-  const proximos7 = boletos.filter((b) => {
-    const d = diasAte(b.data_vencimento, hoje);
-    return d != null && d >= 0 && d <= 7;
-  });
-
-  const linhas: string[] = [
-    "📊 Resumo diário · Contas a Receber",
-    `📅 ${dataPorExtenso()}`,
-    "",
-    "— Movimento de hoje —",
-  ];
-
-  if (importadosHoje.length === 0) {
-    linhas.push("Nenhum boleto importado hoje.");
-  } else {
-    linhas.push(
-      `📥 ${vendasHoje.length} venda(s) · ${importadosHoje.length} boleto(s) · ${formatarMoeda(
-        valorTotal(importadosHoje)
-      )}`
-    );
-    linhas.push(
-      vendasHojeAcima.length > 0
-        ? `🔴 ${vendasHojeAcima.length} venda(s) acima do limite de ${limite} dias`
-        : `✅ Nenhuma venda acima do limite de ${limite} dias`
-    );
-
-    // Destaque das vendas mais longas do dia.
-    const maisLongas = [...vendasHoje]
-      .filter((v) => v.prazoUltima != null)
-      .sort((a, b) => (b.prazoUltima ?? 0) - (a.prazoUltima ?? 0))
-      .slice(0, 3);
-    if (maisLongas.length > 0) {
-      linhas.push("", "Maiores prazos de hoje:");
-      for (const v of maisLongas) {
-        const marca = v.acimaLimite > 0 ? "🔴" : "🟢";
-        linhas.push(
-          `${marca} ${v.sacado} · ${v.parcelas}x · ${formatarMoeda(
-            v.valorTotal
-          )} · ${v.prazoUltima}d`
-        );
-      }
-    }
-  }
-
-  linhas.push(
-    "",
-    "— Carteira —",
-    `💰 Total a receber: ${formatarMoeda(carteira)}`,
-    `⏳ Prazo médio de recebimento: ${pmr != null ? `${pmr} dias` : "—"} (limite ${limite})`,
-    `📆 Vencem em até 7 dias: ${proximos7.length} · ${formatarMoeda(
-      valorTotal(proximos7)
-    )}`
-  );
-
   if (vencidos.length > 0) {
     linhas.push(
-      `⚠️ Já vencidos: ${vencidos.length} · ${formatarMoeda(valorTotal(vencidos))}`
+      `⚠️ ${vencidos.length} vencido(s) · ${moedaCurta(valorTotal(vencidos))}`
     );
   }
 
@@ -144,7 +148,8 @@ async function executar(req: Request) {
 
   const texto = montarResumo(
     (boletosData ?? []) as Boleto[],
-    config?.limite_prazo_dias ?? 60
+    config?.limite_prazo_dias ?? 60,
+    hojeBrasilia()
   );
 
   let enviados = 0;
@@ -154,7 +159,7 @@ async function executar(req: Request) {
 
   await registrarAuditoria(
     "telegram.resumo",
-    `Resumo diário enviado para ${enviados} destinatário(s).`
+    `Resumo do dia enviado para ${enviados} destinatário(s).`
   );
 
   return NextResponse.json({ ok: true, enviados, motivo: "ok" });

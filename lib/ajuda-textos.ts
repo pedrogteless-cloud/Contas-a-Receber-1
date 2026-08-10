@@ -81,7 +81,7 @@ export const AJUDA = {
   telegram:
     "O app avisa no Telegram sempre que uma venda passa do limite de prazo. Para funcionar: (1) criar um bot no @BotFather e colocar o token na Vercel; (2) cada pessoa envia uma mensagem ao bot; (3) você a adiciona aqui como destinatária.",
   resumoDiario:
-    "Panorama enviado uma vez por dia ao grupo: movimento do dia (vendas importadas e quantas passaram do limite), maiores prazos do dia, total a receber, prazo médio de recebimento, o que vence em 7 dias e o que já venceu.",
+    "Fechamento do dia enviado ao grupo às 18h: quanto foi importado hoje, o prazo médio concedido NO DIA, quantas vendas passaram do limite e as três de maior prazo. No rodapé, uma linha com a carteira toda (total, prazo médio geral e o que vence em 7 dias).",
   enviarAlertas:
     "Envia no Telegram os alertas dos boletos acima do limite que ainda não foram avisados. Nunca reenvia um alerta já enviado.",
   exportarExcel:
