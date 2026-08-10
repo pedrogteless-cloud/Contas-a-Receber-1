@@ -68,6 +68,7 @@ export default function ConfiguracoesPage() {
   const [buscando, setBuscando] = useState(false);
   const [testando, setTestando] = useState<string | null>(null);
   const [enviandoResumo, setEnviandoResumo] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
   const [aviso, setAviso] = useState<Aviso>(null);
 
   useEffect(() => {
@@ -160,6 +161,26 @@ export default function ConfiguracoesPage() {
       );
     } finally {
       setEnviandoResumo(false);
+    }
+  }
+
+  async function recalcular() {
+    setRecalculando(true);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/boletos/recalcular", { method: "POST" }).then(
+        (x) => x.json()
+      );
+      setAviso(
+        r?.ok
+          ? {
+              tipo: "ok",
+              texto: `${r.atualizados} boleto(s) atualizado(s) · ${r.acima} acima do limite de ${r.limite} dias.`,
+            }
+          : { tipo: "erro", texto: r?.erro ?? "Não foi possível recalcular." }
+      );
+    } finally {
+      setRecalculando(false);
     }
   }
 
@@ -277,6 +298,34 @@ export default function ConfiguracoesPage() {
               ? "Uma venda de R$ 10.000 em 4x é avaliada como um crédito único até a última parcela (ex.: 120 dias) — e gera um alerta só."
               : "Cada parcela é avaliada isoladamente pelo seu próprio vencimento."}
           </p>
+
+          {ehAdminAtual && (
+            <div className="mt-4 space-y-2 rounded-lg border bg-muted/30 p-3">
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                Aplicar aos boletos já importados
+                <Ajuda titulo="Recalcular" texto={AJUDA.recalcular} />
+              </p>
+              <p className="text-xs text-muted-foreground">
+                A marcação de “acima do limite” fica gravada em cada boleto no
+                momento da importação. Depois de salvar um limite novo, clique
+                aqui para reavaliar o que já está no sistema.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={recalculando}
+                onClick={recalcular}
+              >
+                {recalculando ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <RefreshCw />
+                )}
+                Recalcular com o limite salvo
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

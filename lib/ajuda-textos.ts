@@ -86,6 +86,8 @@ export const AJUDA = {
     "Envia no Telegram os alertas dos boletos acima do limite que ainda não foram avisados. Nunca reenvia um alerta já enviado.",
   exportarExcel:
     "Baixa em .xlsx exatamente os boletos que estão passando pelos filtros atuais.",
+  recalcular:
+    "Reaplica o limite e a regra atuais a todos os boletos já importados, atualizando quem está acima do limite. Use depois de mudar o limite. Não reenvia alertas já enviados.",
   limparHistorico:
     "Apaga TODOS os boletos importados. Serve para zerar a base depois dos testes. Não afeta usuários nem configurações, e não tem como desfazer.",
 } as const;
