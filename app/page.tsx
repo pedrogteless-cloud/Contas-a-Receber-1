@@ -26,6 +26,7 @@ import {
   type LinhaImportada,
 } from "@/lib/boletos";
 import { AJUDA } from "@/lib/ajuda-textos";
+import { hojeISO } from "@/lib/tempo";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
@@ -275,7 +276,7 @@ export default function ImportacaoPage() {
         (mesmasVendas ?? []) as unknown as typeof novas
       );
 
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeISO();
       const registros = novas.map((l, i) => {
         const prazo = calcularPrazoDias(l.data_entrada, l.data_vencimento);
         const v = dadosVenda[i];

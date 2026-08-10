@@ -20,6 +20,7 @@ import { AJUDA } from "@/lib/ajuda-textos";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import { ComAjuda } from "@/components/ajuda";
+import { Relogio } from "@/components/relogio";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
@@ -100,7 +101,8 @@ export function Nav() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          <Relogio />
           <nav className="flex items-center gap-0.5 rounded-full border border-border/70 bg-card/60 p-1 shadow-sm">
             {links.map(({ href, label, icon: Icon, ajuda }) => {
               const ativo =

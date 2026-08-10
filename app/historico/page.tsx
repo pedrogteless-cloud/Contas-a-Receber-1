@@ -22,10 +22,12 @@ import {
 } from "@/lib/boletos";
 import { prazoMedio } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
+import { descreverPrazo, hojeISO, situacaoVencimento } from "@/lib/tempo";
 import { corEmpresa } from "@/lib/theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda, ComAjuda } from "@/components/ajuda";
+import { DataRelativa } from "@/components/data-relativa";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -186,7 +188,7 @@ export default function HistoricoPage() {
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Boletos");
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeISO();
     XLSX.writeFile(wb, `contas-a-receber-${hoje}.xlsx`);
   }
 
@@ -400,8 +402,12 @@ export default function HistoricoPage() {
                         {b.sacado}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{b.nosso_numero || "—"}</TableCell>
-                      <TableCell>{formatarData(b.data_entrada)}</TableCell>
-                      <TableCell>{formatarData(b.data_vencimento)}</TableCell>
+                      <TableCell className="tabular-nums text-muted-foreground">
+                        {formatarData(b.data_entrada)}
+                      </TableCell>
+                      <TableCell>
+                        <DataRelativa iso={b.data_vencimento} />
+                      </TableCell>
                       <TableCell className="text-center tabular-nums text-muted-foreground">
                         {b.prazo_dias ?? "—"}d
                       </TableCell>

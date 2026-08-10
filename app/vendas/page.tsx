@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
+import { DataRelativa } from "@/components/data-relativa";
 import {
   Card,
   CardContent,
@@ -267,11 +268,11 @@ export default function VendasPage() {
                           <TableCell className="text-right font-medium tabular-nums">
                             {formatarMoeda(c.valorTotal)}
                           </TableCell>
-                          <TableCell className="tabular-nums">
-                            {formatarData(c.primeiroVencimento)}
+                          <TableCell>
+                            <DataRelativa iso={c.primeiroVencimento} />
                           </TableCell>
-                          <TableCell className="tabular-nums">
-                            {formatarData(c.ultimoVencimento)}
+                          <TableCell>
+                            <DataRelativa iso={c.ultimoVencimento} />
                           </TableCell>
                           <TableCell className="text-right">
                             {c.prazoUltima != null ? (
@@ -317,8 +318,8 @@ export default function VendasPage() {
                                 <TableCell className="tabular-nums text-muted-foreground">
                                   {formatarData(b.data_entrada)}
                                 </TableCell>
-                                <TableCell className="tabular-nums">
-                                  {formatarData(b.data_vencimento)}
+                                <TableCell>
+                                  <DataRelativa iso={b.data_vencimento} />
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <span

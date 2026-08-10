@@ -43,6 +43,7 @@ import {
   valorTotal,
 } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
+import { dataPorExtenso, diasAte, hojeISO } from "@/lib/tempo";
 import { CHART, corEmpresa, formatarCompacto } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
@@ -129,6 +130,21 @@ export default function DashboardPage() {
   const total = valorTotal(dados);
   const est = estatisticasLimite(dados, limite);
   const aVencer = aVencerEmDias(dados, 7);
+
+  // Contexto de tempo: o que já venceu e o que vence hoje.
+  const hoje = hojeISO();
+  const vencidos = useMemo(
+    () =>
+      dados.filter((b) => {
+        const d = diasAte(b.data_vencimento, hoje);
+        return d != null && d < 0;
+      }),
+    [dados, hoje]
+  );
+  const vencemHoje = useMemo(
+    () => dados.filter((b) => diasAte(b.data_vencimento, hoje) === 0),
+    [dados, hoje]
+  );
 
   const porEmpresa = useMemo(() => prazoMedioPorEmpresa(dados), [dados]);
   const participacao = useMemo(() => participacaoPorEmpresa(dados), [dados]);
@@ -247,10 +263,20 @@ export default function DashboardPage() {
           <StatCard
             label="A vencer em 7 dias"
             value={String(aVencer.quantidade)}
-            hint={formatarMoeda(aVencer.valor)}
+            hint={`${formatarMoeda(aVencer.valor)}${
+              vencemHoje.length > 0 ? ` · ${vencemHoje.length} vence(m) hoje` : ""
+            }`}
             icon={CalendarClock}
             tom="warning"
             ajuda={AJUDA.aVencer7}
+          />
+          <StatCard
+            label="Já vencidos"
+            value={String(vencidos.length)}
+            hint={formatarMoeda(vencidos.reduce((s, b) => s + (b.valor ?? 0), 0))}
+            icon={CalendarClock}
+            tom={vencidos.length > 0 ? "danger" : "success"}
+            ajuda={AJUDA.vencidos}
           />
         </div>
       )}

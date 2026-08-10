@@ -34,6 +34,7 @@ import { useTheme } from "@/lib/use-theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
+import { DataRelativa } from "@/components/data-relativa";
 import {
   Card,
   CardContent,
@@ -385,8 +386,8 @@ export default function ClientesPage() {
                         <TableCell className="text-right font-medium tabular-nums">
                           {formatarMoeda(c.valor)}
                         </TableCell>
-                        <TableCell className="tabular-nums">
-                          {formatarData(c.ultimoVencimento)}
+                        <TableCell>
+                          <DataRelativa iso={c.ultimoVencimento} />
                         </TableCell>
                       </TableRow>
                     );

@@ -9,6 +9,7 @@ import {
   formatarMoeda,
   type Boleto,
 } from "./boletos";
+import { hojeISO } from "./tempo";
 
 const MESES_PT = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -21,9 +22,7 @@ function media(valores: number[]): number | null {
   return Math.round((soma / valores.length) * 10) / 10;
 }
 
-function hojeISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+
 
 // ---------------------------------------------------------------------------
 // Métricas simples

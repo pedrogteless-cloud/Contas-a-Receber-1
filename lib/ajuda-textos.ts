@@ -41,7 +41,9 @@ export const AJUDA = {
   valorCarteira:
     "Soma do valor de todos os boletos filtrados — o total que ainda há a receber no recorte atual.",
   aVencer7:
-    "Boletos que vencem de hoje até 7 dias à frente, com a soma dos valores.",
+    "Boletos que vencem de hoje até 7 dias à frente, com a soma dos valores. A data de referência é a de hoje, mostrada no topo da tela.",
+  vencidos:
+    "Boletos cuja data de vencimento já passou, considerando a data de hoje. Nas tabelas eles aparecem em vermelho, com há quanto tempo venceram.",
   faixaPrazo:
     "Distribuição dos boletos por faixa de prazo (até 30, 31–45, 46–60, 61–90 e mais de 90 dias). Ajuda a ver a concentração dos prazos concedidos.",
   evolucaoPrazo:
