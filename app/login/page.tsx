@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Lock, LogIn, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, Lock, LogIn, ShieldCheck, User } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -10,20 +10,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
+  const [modo, setModo] = useState<"carregando" | "login" | "setup">(
+    "carregando"
+  );
+  const [nome, setNome] = useState("");
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
+  const [confirmar, setConfirmar] = useState("");
   const [erro, setErro] = useState<string | null>(null);
-  const [entrando, setEntrando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
-  async function entrar(e: React.FormEvent) {
+  useEffect(() => {
+    fetch("/api/setup")
+      .then((r) => r.json())
+      .then((d) => setModo(d?.precisaSetup ? "setup" : "login"))
+      .catch(() => setModo("login"));
+  }, []);
+
+  async function enviar(e: React.FormEvent) {
     e.preventDefault();
-    setEntrando(true);
+    setEnviando(true);
     setErro(null);
+
+    if (modo === "setup" && senha !== confirmar) {
+      setErro("As senhas não conferem.");
+      setEnviando(false);
+      return;
+    }
+
     try {
-      const resp = await fetch("/api/login", {
+      const url = modo === "setup" ? "/api/setup" : "/api/login";
+      const corpo =
+        modo === "setup" ? { nome, usuario, senha } : { usuario, senha };
+
+      const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usuario, senha }),
+        body: JSON.stringify(corpo),
       });
       const r = (await resp.json().catch(() => null)) as {
         ok?: boolean;
@@ -34,13 +57,15 @@ export default function LoginPage() {
         window.location.href = "/";
       } else {
         setErro(r?.erro ?? "Não foi possível entrar.");
-        setEntrando(false);
+        setEnviando(false);
       }
     } catch {
       setErro("Falha de conexão. Tente novamente.");
-      setEntrando(false);
+      setEnviando(false);
     }
   }
+
+  const setup = modo === "setup";
 
   return (
     <div className="flex min-h-[75vh] items-center justify-center">
@@ -56,54 +81,110 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <form onSubmit={entrar} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="usuario">Usuário</Label>
-              <div className="relative">
-                <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="usuario"
-                  autoFocus
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  className="pl-8"
-                  value={usuario}
-                  onChange={(e) => setUsuario(e.target.value)}
-                  placeholder="seu.usuario"
-                />
-              </div>
+          {modo === "carregando" ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
             </div>
+          ) : (
+            <>
+              {setup && (
+                <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2 text-sm">
+                  <p className="flex items-center gap-1.5 font-medium">
+                    <ShieldCheck className="h-4 w-4 text-brand" /> Primeiro
+                    acesso
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Crie a conta de administrador (senha-mestra). Ela terá acesso
+                    total, incluindo usuários e auditoria.
+                  </p>
+                </div>
+              )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="senha">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="senha"
-                  type="password"
-                  className="pl-8"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  placeholder="••••••••"
-                />
-              </div>
-            </div>
+              <form onSubmit={enviar} className="space-y-3">
+                {setup && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="nome">Seu nome</Label>
+                    <Input
+                      id="nome"
+                      value={nome}
+                      onChange={(e) => setNome(e.target.value)}
+                      placeholder="Pedro Teles"
+                    />
+                  </div>
+                )}
 
-            {erro && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-                {erro}
-              </p>
-            )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="usuario">Usuário</Label>
+                  <div className="relative">
+                    <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="usuario"
+                      autoFocus={!setup}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      className="pl-8"
+                      value={usuario}
+                      onChange={(e) => setUsuario(e.target.value)}
+                      placeholder="pedro"
+                    />
+                  </div>
+                </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={entrando || !usuario || !senha}
-            >
-              {entrando ? <Loader2 className="animate-spin" /> : <LogIn />}
-              Entrar
-            </Button>
-          </form>
+                <div className="space-y-1.5">
+                  <Label htmlFor="senha">Senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="senha"
+                      type="password"
+                      className="pl-8"
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      placeholder={setup ? "mín. 6 caracteres" : "••••••••"}
+                    />
+                  </div>
+                </div>
+
+                {setup && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirmar">Confirmar senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="confirmar"
+                        type="password"
+                        className="pl-8"
+                        value={confirmar}
+                        onChange={(e) => setConfirmar(e.target.value)}
+                        placeholder="repita a senha"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {erro && (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                    {erro}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={enviando || !usuario || !senha}
+                >
+                  {enviando ? (
+                    <Loader2 className="animate-spin" />
+                  ) : setup ? (
+                    <ShieldCheck />
+                  ) : (
+                    <LogIn />
+                  )}
+                  {setup ? "Criar administrador" : "Entrar"}
+                </Button>
+              </form>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

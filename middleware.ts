@@ -3,26 +3,26 @@ import type { NextRequest } from "next/server";
 
 const COOKIE = "cr1_sess";
 
+// Rotas acessíveis sem sessão (login e o preparo do primeiro administrador).
+const LIVRES = new Set([
+  "/login",
+  "/api/login",
+  "/api/logout",
+  "/api/sessao",
+  "/api/setup",
+]);
+
 /**
- * Protege o app quando o login está configurado (ADMIN_USUARIO + ADMIN_SENHA).
- * Faz apenas a checagem barata: existe cookie de sessão? A validação da
- * assinatura acontece nos route handlers/páginas (Node), que têm acesso ao
- * segredo e ao banco.
+ * Exige sessão para tudo, exceto as rotas livres acima.
+ *
+ * Aqui fazemos só a checagem barata (existe cookie?). A validação da
+ * assinatura e do papel acontece nos route handlers (Node), que têm o segredo
+ * e o banco. Se ainda não houver nenhum usuário, /login mostra a tela de
+ * criação do primeiro administrador.
  */
 export function middleware(req: NextRequest) {
-  const loginAtivo =
-    Boolean(process.env.ADMIN_USUARIO) && Boolean(process.env.ADMIN_SENHA);
-  if (!loginAtivo) return NextResponse.next();
-
   const { pathname } = req.nextUrl;
-  if (
-    pathname === "/login" ||
-    pathname === "/api/login" ||
-    pathname === "/api/logout" ||
-    pathname === "/api/sessao"
-  ) {
-    return NextResponse.next();
-  }
+  if (LIVRES.has(pathname)) return NextResponse.next();
 
   if (req.cookies.get(COOKIE)?.value) return NextResponse.next();
 

@@ -63,13 +63,19 @@ export async function garantirAdmin(): Promise<void> {
 
   if (data) return;
 
-  await supabase.from("usuarios").insert({
+  const { error } = await supabase.from("usuarios").insert({
     nome: "Administrador",
     usuario: usuario.toLowerCase(),
     senha_hash: hashSenha(senha),
     papel: "admin" as Papel,
     ativo: true,
   });
+
+  if (error) {
+    console.error("[garantirAdmin] falha ao criar usuário mestre:", error);
+    return;
+  }
+
   await registrarAuditoria(
     "usuario.criado",
     `Usuário mestre "${usuario.toLowerCase()}" criado automaticamente.`,
