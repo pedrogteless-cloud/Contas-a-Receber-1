@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim().replace(/^["']|["']$/g, "");
   if (!token) {
     return NextResponse.json(
       { ok: false, erro: "Bot sem token configurado." },

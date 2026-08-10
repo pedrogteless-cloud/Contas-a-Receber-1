@@ -53,6 +53,7 @@ interface ChatEncontrado {
 
 export default function ConfiguracoesPage() {
   const [configId, setConfigId] = useState<string | null>(null);
+  const [limiteSalvo, setLimiteSalvo] = useState<number>(60);
   const [limite, setLimite] = useState<number>(60);
   const [regra, setRegra] = useState<"venda" | "boleto">("venda");
   const [chatIds, setChatIds] = useState<string[]>([]);
@@ -81,6 +82,7 @@ export default function ConfiguracoesPage() {
         if (data) {
           setConfigId(data.id);
           setLimite(data.limite_prazo_dias ?? 60);
+          setLimiteSalvo(data.limite_prazo_dias ?? 60);
           setRegra((data.regra_limite as "venda" | "boleto") ?? "venda");
           setChatIds(
             Array.isArray(data.telegram_chat_ids) ? data.telegram_chat_ids : []
@@ -227,6 +229,7 @@ export default function ConfiguracoesPage() {
         if (res.data) setConfigId(res.data.id);
       }
       if (error) throw error;
+      setLimiteSalvo(Number(limite) || 0);
       setAviso({ tipo: "ok", texto: "Configurações salvas." });
     } catch (err) {
       console.error(err);
@@ -310,6 +313,13 @@ export default function ConfiguracoesPage() {
                 momento da importação. Depois de salvar um limite novo, clique
                 aqui para reavaliar o que já está no sistema.
               </p>
+              {Number(limite) !== limiteSalvo && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                  Você mudou o limite para {limite}, mas o salvo ainda é{" "}
+                  {limiteSalvo}. Clique em “Salvar configurações” antes de
+                  recalcular.
+                </p>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -322,7 +332,7 @@ export default function ConfiguracoesPage() {
                 ) : (
                   <RefreshCw />
                 )}
-                Recalcular com o limite salvo
+                Recalcular com o limite salvo ({limiteSalvo} dias)
               </Button>
             </div>
           )}

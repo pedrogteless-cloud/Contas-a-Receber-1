@@ -118,7 +118,7 @@ async function executar(req: Request) {
     return NextResponse.json({ erro: "Não autorizado." }, { status: 401 });
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim().replace(/^["']|["']$/g, "");
   if (!token) {
     return NextResponse.json({ ok: false, motivo: "sem_token" });
   }

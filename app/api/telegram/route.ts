@@ -94,7 +94,7 @@ async function enviarTelegram(
  * Body opcional: { ids?: string[] } para restringir a boletos específicos.
  */
 export async function POST(req: Request) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim().replace(/^["']|["']$/g, "");
 
   let ids: string[] | undefined;
   try {

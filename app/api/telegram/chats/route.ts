@@ -23,7 +23,7 @@ export async function GET() {
     return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim().replace(/^["']|["']$/g, "");
   if (!token) {
     return NextResponse.json({ chats: [], motivo: "sem_token" });
   }
