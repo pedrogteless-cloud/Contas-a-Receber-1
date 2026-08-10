@@ -67,6 +67,7 @@ export default function ConfiguracoesPage() {
   >(null);
   const [buscando, setBuscando] = useState(false);
   const [testando, setTestando] = useState<string | null>(null);
+  const [enviandoResumo, setEnviandoResumo] = useState(false);
   const [aviso, setAviso] = useState<Aviso>(null);
 
   useEffect(() => {
@@ -131,6 +132,34 @@ export default function ConfiguracoesPage() {
       );
     } finally {
       setTestando(null);
+    }
+  }
+
+  async function enviarResumoAgora() {
+    setEnviandoResumo(true);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/telegram/resumo", { method: "POST" }).then(
+        (x) => x.json()
+      );
+      setAviso(
+        r?.ok
+          ? {
+              tipo: "ok",
+              texto: `Resumo enviado para ${r.enviados} destinatário(s).`,
+            }
+          : {
+              tipo: "erro",
+              texto:
+                r?.motivo === "sem_token"
+                  ? "Bot sem token configurado."
+                  : r?.motivo === "sem_destinatarios"
+                    ? "Cadastre ao menos um destinatário antes."
+                    : "Não foi possível enviar o resumo.",
+            }
+      );
+    } finally {
+      setEnviandoResumo(false);
     }
   }
 
@@ -425,6 +454,28 @@ export default function ConfiguracoesPage() {
               ))}
             </ul>
           )}
+
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              Resumo diário
+              <Ajuda titulo="Resumo diário" texto={AJUDA.resumoDiario} />
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Todo dia às 18h (horário de Brasília) o bot manda o panorama da
+              carteira: o que entrou no dia, quanto passou do limite, prazo médio
+              de recebimento, o que vence em 7 dias e o que já venceu.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!status?.configurado || enviandoResumo}
+              onClick={enviarResumoAgora}
+            >
+              {enviandoResumo ? <Loader2 className="animate-spin" /> : <Send />}
+              Enviar resumo agora
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

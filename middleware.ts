@@ -3,13 +3,16 @@ import type { NextRequest } from "next/server";
 
 const COOKIE = "cr1_sess";
 
-// Rotas acessíveis sem sessão (login e o preparo do primeiro administrador).
+// Rotas acessíveis sem sessão: login, preparo do primeiro administrador e o
+// resumo diário (chamado pelo agendamento da Vercel, que não tem cookie — a
+// própria rota valida o CRON_SECRET).
 const LIVRES = new Set([
   "/login",
   "/api/login",
   "/api/logout",
   "/api/sessao",
   "/api/setup",
+  "/api/telegram/resumo",
 ]);
 
 /**
