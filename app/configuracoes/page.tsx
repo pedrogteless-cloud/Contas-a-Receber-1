@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, LogOut, Plus, Save, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  LogOut,
+  Plus,
+  RefreshCw,
+  Save,
+  Send,
+  Trash2,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { AJUDA } from "@/lib/ajuda-textos";
@@ -28,6 +38,19 @@ import {
 
 type Aviso = { tipo: "ok" | "erro"; texto: string } | null;
 
+interface StatusBot {
+  configurado: boolean;
+  motivo?: string;
+  detalhe?: string;
+  bot?: { username: string; nome: string };
+}
+
+interface ChatEncontrado {
+  id: string;
+  nome: string;
+  tipo: string;
+}
+
 export default function ConfiguracoesPage() {
   const [configId, setConfigId] = useState<string | null>(null);
   const [limite, setLimite] = useState<number>(60);
@@ -38,6 +61,12 @@ export default function ConfiguracoesPage() {
   const [salvando, setSalvando] = useState(false);
   const [limpando, setLimpando] = useState(false);
   const [ehAdminAtual, setEhAdminAtual] = useState(false);
+  const [status, setStatus] = useState<StatusBot | null>(null);
+  const [chatsEncontrados, setChatsEncontrados] = useState<
+    ChatEncontrado[] | null
+  >(null);
+  const [buscando, setBuscando] = useState(false);
+  const [testando, setTestando] = useState<string | null>(null);
   const [aviso, setAviso] = useState<Aviso>(null);
 
   useEffect(() => {
@@ -62,7 +91,48 @@ export default function ConfiguracoesPage() {
       .then((r) => r.json())
       .then((d) => setEhAdminAtual(d?.sessao?.papel === "admin"))
       .catch(() => setEhAdminAtual(false));
+
+    fetch("/api/telegram/status")
+      .then((r) => r.json())
+      .then((d) => setStatus(d as StatusBot))
+      .catch(() => setStatus({ configurado: false, motivo: "erro_rede" }));
   }, []);
+
+  async function buscarChats() {
+    setBuscando(true);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/telegram/chats").then((x) => x.json());
+      setChatsEncontrados(r?.chats ?? []);
+      if (r?.motivo && r.motivo !== "ok" && r.motivo !== "sem_token") {
+        setAviso({
+          tipo: "erro",
+          texto: r.detalhe ?? "Não foi possível consultar o Telegram.",
+        });
+      }
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  async function enviarTeste(chatId: string) {
+    setTestando(chatId);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/telegram/teste", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId }),
+      }).then((x) => x.json());
+      setAviso(
+        r?.ok
+          ? { tipo: "ok", texto: `Mensagem de teste enviada para ${chatId}.` }
+          : { tipo: "erro", texto: r?.erro ?? "Falha ao enviar o teste." }
+      );
+    } finally {
+      setTestando(null);
+    }
+  }
 
   function adicionarChat() {
     const v = novoChat.trim();
@@ -183,15 +253,121 @@ export default function ConfiguracoesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Destinatários do Telegram</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">
+            Alertas no Telegram
+            <Ajuda titulo="Telegram" texto={AJUDA.telegram} />
+          </CardTitle>
           <CardDescription>
-            Cadastre os <code>chat_id</code> que devem receber os alertas.
+            Quem deve receber os avisos de venda acima do limite.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Estado da conexão do bot */}
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+              status?.configurado
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+            )}
+          >
+            {status === null ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Verificando o bot…
+              </>
+            ) : status.configurado ? (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Bot conectado:{" "}
+                <span className="font-medium">@{status.bot?.username}</span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="h-4 w-4" />
+                {status.motivo === "sem_token"
+                  ? "Bot ainda não configurado — falta a variável TELEGRAM_BOT_TOKEN na Vercel."
+                  : status.motivo === "token_invalido"
+                    ? `Token recusado pelo Telegram. ${status.detalhe ?? ""}`
+                    : "Não foi possível falar com o Telegram agora."}
+              </>
+            )}
+          </div>
+
+          {/* Descoberta de destinatários */}
+          {status?.configurado && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+              <p className="text-sm font-medium">Adicionar quem vai receber</p>
+              <p className="text-xs text-muted-foreground">
+                Peça para a pessoa abrir o Telegram, procurar{" "}
+                <span className="font-medium">@{status.bot?.username}</span> e
+                enviar qualquer mensagem (ex.: “oi”). Depois clique em buscar —
+                ela aparece aqui para adicionar com um clique.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={buscando}
+                  onClick={buscarChats}
+                >
+                  {buscando ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <RefreshCw />
+                  )}
+                  Buscar quem falou com o bot
+                </Button>
+              </div>
+
+              {chatsEncontrados !== null &&
+                (chatsEncontrados.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Ninguém encontrado. A pessoa precisa enviar uma mensagem ao
+                    bot — e o Telegram só guarda as conversas recentes.
+                  </p>
+                ) : (
+                  <ul className="divide-y rounded-md border bg-card">
+                    {chatsEncontrados.map((c) => {
+                      const jaTem = chatIds.includes(c.id);
+                      return (
+                        <li
+                          key={c.id}
+                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">
+                              {c.nome}
+                            </span>
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              {c.id} · {c.tipo}
+                            </span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant={jaTem ? "ghost" : "outline"}
+                            disabled={jaTem}
+                            onClick={() => {
+                              setChatIds((prev) => [...prev, c.id]);
+                              setAviso({
+                                tipo: "ok",
+                                texto: `${c.nome} adicionado. Clique em "Salvar configurações" para confirmar.`,
+                              });
+                            }}
+                          >
+                            {jaTem ? "Já cadastrado" : <><Plus /> Adicionar</>}
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ))}
+            </div>
+          )}
+
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-1.5">
-              <Label htmlFor="novoChat">Novo chat_id</Label>
+              <Label htmlFor="novoChat">Ou informe o chat_id manualmente</Label>
               <Input
                 id="novoChat"
                 value={novoChat}
@@ -219,17 +395,32 @@ export default function ConfiguracoesPage() {
               {chatIds.map((id) => (
                 <li
                   key={id}
-                  className="flex items-center justify-between px-3 py-2 text-sm"
+                  className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
                 >
                   <span className="font-mono">{id}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removerChat(id)}
-                    aria-label="Remover destinatário"
-                  >
-                    <Trash2 className="text-muted-foreground" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!status?.configurado || testando === id}
+                      onClick={() => enviarTeste(id)}
+                    >
+                      {testando === id ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <Send />
+                      )}
+                      Testar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removerChat(id)}
+                      aria-label="Remover destinatário"
+                    >
+                      <Trash2 className="text-muted-foreground" />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

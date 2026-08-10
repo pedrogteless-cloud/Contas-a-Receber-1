@@ -78,6 +78,8 @@ export const AJUDA = {
   // Histórico / ações
   alertaStatus:
     "Enviado = o alerta desse boleto já foi para o Telegram. Pendente = ainda não (falta token, destinatário, ou o envio falhou).",
+  telegram:
+    "O app avisa no Telegram sempre que uma venda passa do limite de prazo. Para funcionar: (1) criar um bot no @BotFather e colocar o token na Vercel; (2) cada pessoa envia uma mensagem ao bot; (3) você a adiciona aqui como destinatária.",
   enviarAlertas:
     "Envia no Telegram os alertas dos boletos acima do limite que ainda não foram avisados. Nunca reenvia um alerta já enviado.",
   exportarExcel:
