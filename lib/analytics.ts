@@ -3,7 +3,12 @@
 // Agregações e insights para o Dashboard e o Histórico.
 // ---------------------------------------------------------------------------
 
-import { formatarMoeda, type Boleto } from "./boletos";
+import {
+  chaveCompra,
+  documentoEParcela,
+  formatarMoeda,
+  type Boleto,
+} from "./boletos";
 
 const MESES_PT = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -303,6 +308,76 @@ export function resumoClientes(
       };
     })
     .sort((a, b) => b.valor - a.valor);
+}
+
+// ---------------------------------------------------------------------------
+// Compras (parcelamentos) — boletos do mesmo documento
+// ---------------------------------------------------------------------------
+
+export interface Compra {
+  chave: string;
+  documento: string;
+  empresa: string;
+  sacado: string;
+  parcelas: number;
+  valorTotal: number;
+  valorParcela: number | null; // quando todas as parcelas têm o mesmo valor
+  entrada: string | null; // ISO
+  primeiroVencimento: string | null; // ISO
+  ultimoVencimento: string | null; // ISO
+  prazoMedio: number | null;
+  prazoUltima: number | null;
+  acimaLimite: number;
+  boletos: Boleto[];
+}
+
+export function agruparCompras(boletos: Boleto[], limite: number): Compra[] {
+  const grupos = new Map<string, Boleto[]>();
+  for (const b of boletos) {
+    const chave = chaveCompra(b);
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(b);
+  }
+
+  return Array.from(grupos.entries())
+    .map(([chave, lista]) => {
+      const ordenada = [...lista].sort((a, b) =>
+        (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
+      );
+      const valores = ordenada.map((b) => b.valor ?? 0);
+      const iguais =
+        valores.length > 0 &&
+        valores.every((v) => Math.abs(v - valores[0]) < 0.011);
+      const entradas = ordenada
+        .map((b) => b.data_entrada)
+        .filter((d): d is string => Boolean(d))
+        .sort();
+      const vencs = ordenada
+        .map((b) => b.data_vencimento)
+        .filter((d): d is string => Boolean(d))
+        .sort();
+      const prazos = ordenada
+        .map((b) => b.prazo_dias)
+        .filter((p): p is number => typeof p === "number");
+
+      return {
+        chave,
+        documento: documentoEParcela(ordenada[0]?.seu_numero).documento || "—",
+        empresa: ordenada[0]?.empresa || "Não classificado",
+        sacado: ordenada[0]?.sacado || "—",
+        parcelas: ordenada.length,
+        valorTotal: valores.reduce((s, v) => s + v, 0),
+        valorParcela: iguais ? valores[0] : null,
+        entrada: entradas[0] ?? null,
+        primeiroVencimento: vencs[0] ?? null,
+        ultimoVencimento: vencs[vencs.length - 1] ?? null,
+        prazoMedio: media(prazos),
+        prazoUltima: prazos.length ? Math.max(...prazos) : null,
+        acimaLimite: prazos.filter((p) => p > limite).length,
+        boletos: ordenada,
+      };
+    })
+    .sort((a, b) => b.valorTotal - a.valorTotal);
 }
 
 // ---------------------------------------------------------------------------

@@ -41,11 +41,13 @@ import {
   topClientes,
   valorTotal,
 } from "@/lib/analytics";
+import { AJUDA } from "@/lib/ajuda-textos";
 import { CHART, corEmpresa, formatarCompacto } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { Ajuda } from "@/components/ajuda";
 import {
   Card,
   CardContent,
@@ -207,16 +209,19 @@ export default function DashboardPage() {
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
             icon={Gauge}
             tom="brand"
+            ajuda={AJUDA.prazoMedio}
           />
           <StatCard
             label="Prazo médio · Ley Móveis"
             value={pmMoveis != null ? `${pmMoveis} dias` : "—"}
             icon={Sofa}
+            ajuda={AJUDA.prazoMedioEmpresa}
           />
           <StatCard
             label="Prazo médio · Ley Colchões"
             value={pmColchoes != null ? `${pmColchoes} dias` : "—"}
             icon={BedDouble}
+            ajuda={AJUDA.prazoMedioEmpresa}
           />
           <StatCard
             label="Valor total em carteira"
@@ -224,6 +229,7 @@ export default function DashboardPage() {
             hint={`${dados.length} boleto(s)`}
             icon={Wallet}
             tom="success"
+            ajuda={AJUDA.valorCarteira}
           />
           <StatCard
             label="Acima do limite"
@@ -231,6 +237,7 @@ export default function DashboardPage() {
             hint={formatarMoeda(est.valor)}
             icon={AlertTriangle}
             tom={est.quantidade > 0 ? "danger" : "success"}
+            ajuda={AJUDA.acimaLimite}
           />
           <StatCard
             label="A vencer em 7 dias"
@@ -238,6 +245,7 @@ export default function DashboardPage() {
             hint={formatarMoeda(aVencer.valor)}
             icon={CalendarClock}
             tom="warning"
+            ajuda={AJUDA.aVencer7}
           />
         </div>
       )}
@@ -256,6 +264,7 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Lightbulb className="h-4 w-4 text-brand" /> Insights automáticos
+              <Ajuda titulo="Insights" texto={AJUDA.insights} />
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -278,6 +287,7 @@ export default function DashboardPage() {
               title="Prazo médio por empresa"
               subtitle="Dias corridos entre entrada e vencimento"
               mounted={mounted}
+              ajuda={AJUDA.prazoMedioEmpresa}
             >
               <BarChart data={porEmpresa} margin={{ top: 8, right: 12, left: -8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grade} vertical={false} />
@@ -310,6 +320,7 @@ export default function DashboardPage() {
               title="Participação no valor por empresa"
               subtitle={`Total em carteira: ${formatarMoeda(total)}`}
               mounted={mounted}
+              ajuda={AJUDA.participacaoEmpresa}
             >
               <PieChart>
                 <Pie
@@ -341,6 +352,7 @@ export default function DashboardPage() {
               title="Distribuição por faixa de prazo"
               subtitle="Quantidade de boletos por faixa (dias)"
               mounted={mounted}
+              ajuda={AJUDA.faixaPrazo}
             >
               <BarChart data={faixas} margin={{ top: 8, right: 12, left: -8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grade} vertical={false} />
@@ -379,6 +391,7 @@ export default function DashboardPage() {
               title="Evolução do prazo médio"
               subtitle="Por mês de vencimento e empresa"
               mounted={mounted}
+              ajuda={AJUDA.evolucaoPrazo}
             >
               <LineChart data={evolucao} margin={{ top: 8, right: 12, left: -8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grade} vertical={false} />
@@ -414,7 +427,10 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Top clientes por valor em carteira</CardTitle>
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                Top clientes por valor em carteira
+                <Ajuda titulo="Top clientes" texto={AJUDA.topClientes} />
+              </CardTitle>
               <CardDescription>Maiores saldos a receber</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 lg:grid-cols-2">
@@ -507,17 +523,22 @@ function ChartCard({
   title,
   subtitle,
   mounted,
+  ajuda,
   children,
 }: {
   title: string;
   subtitle?: string;
   mounted: boolean;
+  ajuda?: string;
   children: ReactNode;
 }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="flex items-center gap-1.5 text-base">
+          {title}
+          {ajuda && <Ajuda titulo={title} texto={ajuda} />}
+        </CardTitle>
         {subtitle && <CardDescription>{subtitle}</CardDescription>}
       </CardHeader>
       <CardContent>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const metadata: Metadata = {
   title: "Contas a Receber 1 · Grupo Ley",
@@ -21,11 +22,13 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: initTheme }} />
       </head>
       <body className="font-sans antialiased">
-        <Nav />
-        <main className="container py-6 sm:py-8">{children}</main>
-        <footer className="container pb-8 pt-4 text-center text-xs text-muted-foreground">
-          Grupo Ley · Controle interno de contas a receber
-        </footer>
+        <TooltipProvider delayDuration={200}>
+          <Nav />
+          <main className="container py-6 sm:py-8">{children}</main>
+          <footer className="container pb-8 pt-4 text-center text-xs text-muted-foreground">
+            Grupo Ley · Controle interno de contas a receber
+          </footer>
+        </TooltipProvider>
       </body>
     </html>
   );

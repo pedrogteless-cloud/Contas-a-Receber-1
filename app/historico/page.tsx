@@ -21,9 +21,11 @@ import {
   type Boleto,
 } from "@/lib/boletos";
 import { prazoMedio } from "@/lib/analytics";
+import { AJUDA } from "@/lib/ajuda-textos";
 import { corEmpresa } from "@/lib/theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { Ajuda, ComAjuda } from "@/components/ajuda";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -189,13 +191,15 @@ export default function HistoricoPage() {
         title="Histórico"
         description="Consulte importações e boletos acima do limite de prazo."
       >
-        <Button
-          variant="outline"
-          onClick={exportarExcel}
-          disabled={filtrados.length === 0}
-        >
-          <Download /> Exportar Excel
-        </Button>
+        <ComAjuda titulo="Exportar Excel" texto={AJUDA.exportarExcel}>
+          <Button
+            variant="outline"
+            onClick={exportarExcel}
+            disabled={filtrados.length === 0}
+          >
+            <Download /> Exportar Excel
+          </Button>
+        </ComAjuda>
       </PageHeader>
 
       {carregando ? (
@@ -206,11 +210,12 @@ export default function HistoricoPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total de boletos" value={String(filtrados.length)} icon={FileStack} tom="brand" />
+          <StatCard label="Total de boletos" value={String(filtrados.length)} icon={FileStack} tom="brand" ajuda="Quantidade de boletos que passam pelos filtros atuais." />
           <StatCard
             label="Prazo médio de recebimento"
             value={pm != null ? `${pm} dias` : "—"}
             icon={Gauge}
+            ajuda={AJUDA.prazoMedio}
           />
           <StatCard
             label="Excederam o limite"
@@ -218,8 +223,9 @@ export default function HistoricoPage() {
             hint={`${pendentes} alerta(s) pendente(s)`}
             icon={AlertTriangle}
             tom={excedidos.length > 0 ? "danger" : "success"}
+            ajuda={AJUDA.acimaLimite}
           />
-          <StatCard label="Valor que excedeu" value={formatarMoeda(valorExcedido)} icon={Wallet} tom="warning" />
+          <StatCard label="Valor que excedeu" value={formatarMoeda(valorExcedido)} icon={Wallet} tom="warning" ajuda="Soma do valor dos boletos que passaram do limite de prazo." />
         </div>
       )}
 
@@ -332,10 +338,12 @@ export default function HistoricoPage() {
             </div>
             <div className="flex items-center gap-3">
               {aviso && <span className="text-sm text-muted-foreground">{aviso}</span>}
-              <Button onClick={enviarPendentes} disabled={enviando || pendentes === 0}>
-                {enviando ? <Loader2 className="animate-spin" /> : <Send />}
-                Enviar alertas pendentes
-              </Button>
+              <ComAjuda titulo="Enviar alertas" texto={AJUDA.enviarAlertas}>
+                <Button onClick={enviarPendentes} disabled={enviando || pendentes === 0}>
+                  {enviando ? <Loader2 className="animate-spin" /> : <Send />}
+                  Enviar alertas pendentes
+                </Button>
+              </ComAjuda>
             </div>
           </div>
         </CardHeader>
@@ -357,9 +365,9 @@ export default function HistoricoPage() {
                     <TableHead>Nosso nº</TableHead>
                     <TableHead>Entrada</TableHead>
                     <TableHead>Vencimento</TableHead>
-                    <TableHead className="text-center">Prazo</TableHead>
+                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Prazo<Ajuda titulo="Prazo" texto={AJUDA.prazoDias} /></span></TableHead>
                     <TableHead className="text-right">Valor</TableHead>
-                    <TableHead>Alerta</TableHead>
+                    <TableHead><span className="inline-flex items-center gap-1">Alerta<Ajuda titulo="Alerta" texto={AJUDA.alertaStatus} /></span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

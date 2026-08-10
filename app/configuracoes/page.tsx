@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { Loader2, LogOut, Plus, Save, Trash2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { AJUDA } from "@/lib/ajuda-textos";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
+import { Ajuda } from "@/components/ajuda";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +28,8 @@ export default function ConfiguracoesPage() {
   const [novoChat, setNovoChat] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [limpando, setLimpando] = useState(false);
+  const [ehAdminAtual, setEhAdminAtual] = useState(false);
   const [aviso, setAviso] = useState<Aviso>(null);
 
   useEffect(() => {
@@ -44,6 +48,11 @@ export default function ConfiguracoesPage() {
         }
         setCarregando(false);
       });
+
+    fetch("/api/sessao")
+      .then((r) => r.json())
+      .then((d) => setEhAdminAtual(d?.sessao?.papel === "admin"))
+      .catch(() => setEhAdminAtual(false));
   }, []);
 
   function adicionarChat() {
@@ -123,7 +132,7 @@ export default function ConfiguracoesPage() {
         <CardContent>
           <div className="flex items-end gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="limite">Limite (dias)</Label>
+              <Label htmlFor="limite" className="flex items-center gap-1.5">Limite (dias)<Ajuda titulo="Limite de prazo" texto={AJUDA.limite} /></Label>
               <Input
                 id="limite"
                 type="number"
@@ -209,6 +218,52 @@ export default function ConfiguracoesPage() {
           </span>
         )}
       </div>
+
+      {ehAdminAtual && (
+        <Card className="border-red-200 dark:border-red-900/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              Zona de risco
+              <Ajuda titulo="Limpar histórico" texto={AJUDA.limparHistorico} />
+            </CardTitle>
+            <CardDescription>
+              Apaga todos os boletos importados. Útil para zerar a base depois
+              dos testes. Não afeta usuários nem configurações.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button
+              variant="destructive"
+              disabled={limpando}
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    "Apagar TODOS os boletos importados?\n\nIsso não pode ser desfeito. Usuários e configurações não serão afetados."
+                  )
+                )
+                  return;
+                setLimpando(true);
+                try {
+                  const resp = await fetch("/api/boletos/limpar", {
+                    method: "POST",
+                  });
+                  const r = await resp.json().catch(() => null);
+                  setAviso(
+                    resp.ok
+                      ? { tipo: "ok", texto: `${r?.apagados ?? 0} boleto(s) apagado(s).` }
+                      : { tipo: "erro", texto: r?.erro ?? "Erro ao limpar." }
+                  );
+                } finally {
+                  setLimpando(false);
+                }
+              }}
+            >
+              {limpando ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              Limpar histórico de boletos
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">

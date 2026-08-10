@@ -7,24 +7,51 @@ import {
   FileUp,
   LayoutDashboard,
   History,
+  Layers,
   LogOut,
   Settings,
   ShieldCheck,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 
 import type { Sessao } from "@/lib/auth";
+import { AJUDA } from "@/lib/ajuda-textos";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
+import { ComAjuda } from "@/components/ajuda";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
-const LINKS = [
-  { href: "/", label: "Importação", icon: FileUp },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/historico", label: "Histórico", icon: History },
-  { href: "/configuracoes", label: "Configurações", icon: Settings },
+interface LinkNav {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  ajuda: string;
+}
+
+const LINKS: LinkNav[] = [
+  { href: "/", label: "Importação", icon: FileUp, ajuda: AJUDA.abaImportacao },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    ajuda: AJUDA.abaDashboard,
+  },
+  { href: "/clientes", label: "Clientes", icon: Users, ajuda: AJUDA.abaClientes },
+  { href: "/compras", label: "Compras", icon: Layers, ajuda: AJUDA.abaCompras },
+  {
+    href: "/historico",
+    label: "Histórico",
+    icon: History,
+    ajuda: AJUDA.abaHistorico,
+  },
+  {
+    href: "/configuracoes",
+    label: "Configurações",
+    icon: Settings,
+    ajuda: AJUDA.abaConfiguracoes,
+  },
 ];
 
 export function Nav() {
@@ -42,7 +69,12 @@ export function Nav() {
 
   const links = [...LINKS];
   if (sessao?.papel === "admin") {
-    links.push({ href: "/admin", label: "Admin", icon: ShieldCheck });
+    links.push({
+      href: "/admin",
+      label: "Admin",
+      icon: ShieldCheck,
+      ajuda: AJUDA.abaAdmin,
+    });
   }
 
   async function sair() {
@@ -65,24 +97,24 @@ export function Nav() {
 
         <div className="flex items-center gap-1">
           <nav className="flex items-center gap-0.5 rounded-full border border-border/70 bg-card/60 p-1 shadow-sm">
-            {links.map(({ href, label, icon: Icon }) => {
+            {links.map(({ href, label, icon: Icon, ajuda }) => {
               const ativo =
                 href === "/" ? pathname === "/" : pathname.startsWith(href);
               return (
-                <Link
-                  key={href}
-                  href={href}
-                  title={label}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                    ativo
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden lg:inline">{label}</span>
-                </Link>
+                <ComAjuda key={href} titulo={label} texto={ajuda} lado="bottom">
+                  <Link
+                    href={href}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                      ativo
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden lg:inline">{label}</span>
+                  </Link>
+                </ComAjuda>
               );
             })}
           </nav>

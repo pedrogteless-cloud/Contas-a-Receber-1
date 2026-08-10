@@ -198,6 +198,44 @@ export function detectarEmpresa(texto: string): string | null {
 }
 
 /**
+ * Identifica a COMPRA (documento) e a parcela a partir do "seu número".
+ *
+ * Os bancos numeram as parcelas com um sufixo: uma venda parcelada aparece
+ * como 442415-01, 442415-02, 442415-03 (Sicoob) ou 53893-1 ... 53893-6
+ * (Itaú). A base antes do último hífen identifica a compra.
+ */
+export function documentoEParcela(seuNumero: string | null | undefined): {
+  documento: string;
+  parcela: number | null;
+} {
+  const primeiro = String(seuNumero ?? "").trim().split(/\s+/)[0] ?? "";
+  if (!primeiro) return { documento: "", parcela: null };
+
+  const m = /^(.*)-(\d{1,3})$/.exec(primeiro);
+  if (m) return { documento: m[1], parcela: Number(m[2]) };
+  return { documento: primeiro, parcela: null };
+}
+
+/**
+ * Chave da compra: empresa + sacado + documento. Boletos com a mesma chave são
+ * parcelas do mesmo parcelamento (ex.: R$ 10.000 em 4x de R$ 2.500).
+ */
+export function chaveCompra(b: {
+  empresa?: string | null;
+  sacado?: string | null;
+  seu_numero?: string | null;
+  nosso_numero?: string | null;
+}): string {
+  const { documento } = documentoEParcela(b.seu_numero);
+  const base = documento || String(b.nosso_numero ?? "").trim();
+  return [
+    (b.empresa ?? "").trim().toLowerCase(),
+    (b.sacado ?? "").trim().toLowerCase(),
+    base.toLowerCase(),
+  ].join("|");
+}
+
+/**
  * Chave de identidade de um boleto, usada para detectar duplicados entre
  * importações (empresa + nosso número + seu número + vencimento + valor).
  */

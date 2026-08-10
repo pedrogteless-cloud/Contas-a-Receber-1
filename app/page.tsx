@@ -23,9 +23,11 @@ import {
   formatarMoeda,
   type LinhaImportada,
 } from "@/lib/boletos";
+import { AJUDA } from "@/lib/ajuda-textos";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
+import { Ajuda, ComAjuda } from "@/components/ajuda";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -353,7 +355,10 @@ export default function ImportacaoPage() {
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Empresa (padrão)</CardTitle>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              Empresa (padrão)
+              <Ajuda titulo="Empresa padrão" texto={AJUDA.empresaPadrao} />
+            </CardTitle>
             <CardDescription>
               Usada só quando o sistema não identificar a empresa pelo próprio
               relatório.
@@ -387,7 +392,10 @@ export default function ImportacaoPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Relatórios dos bancos</CardTitle>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              Relatórios dos bancos
+              <Ajuda titulo="Arquivos aceitos" texto={AJUDA.uploadArquivos} />
+            </CardTitle>
             <CardDescription>
               Sicoob e Itaú (.xlsx ou .pdf). Reconhece o banco e a empresa
               sozinho — pode soltar vários de uma vez.
@@ -466,7 +474,7 @@ export default function ImportacaoPage() {
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle>Conferência</CardTitle>
+                <CardTitle className="flex items-center gap-1.5">Conferência<Ajuda titulo="Conferência" texto={AJUDA.conferencia} /></CardTitle>
                 <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span>{linhas.length} linha(s)</span>
                   <span className="text-border">•</span>
@@ -481,10 +489,12 @@ export default function ImportacaoPage() {
                 <Button variant="outline" onClick={adicionarLinha}>
                   <Plus /> Adicionar
                 </Button>
-                <Button onClick={confirmarImportacao} disabled={salvando}>
-                  {salvando ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
-                  Confirmar importação
-                </Button>
+                <ComAjuda titulo="Confirmar importação" texto={AJUDA.confirmarImportacao}>
+                  <Button onClick={confirmarImportacao} disabled={salvando}>
+                    {salvando ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+                    Confirmar importação
+                  </Button>
+                </ComAjuda>
               </div>
             </div>
           </CardHeader>
@@ -501,7 +511,7 @@ export default function ImportacaoPage() {
                     <TableHead>Entrada</TableHead>
                     <TableHead>Vencimento</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="text-center">Prazo</TableHead>
+                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Prazo<Ajuda titulo="Prazo" texto={AJUDA.prazoDias} /></span></TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>

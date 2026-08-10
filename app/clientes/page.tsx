@@ -22,11 +22,13 @@ import {
   type Boleto,
 } from "@/lib/boletos";
 import { prazoMedio, resumoClientes, valorTotal } from "@/lib/analytics";
+import { AJUDA } from "@/lib/ajuda-textos";
 import { CHART, corEmpresa } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { Ajuda } from "@/components/ajuda";
 import {
   Card,
   CardContent,
@@ -187,18 +189,21 @@ export default function ClientesPage() {
             value={String(clientes.length)}
             icon={Users}
             tom="brand"
+            ajuda="Quantos clientes distintos têm boletos no recorte atual."
           />
           <StatCard
             label="Valor total em carteira"
             value={formatarMoeda(totalCarteira)}
             icon={Wallet}
             tom="success"
+            ajuda={AJUDA.valorCarteira}
           />
           <StatCard
             label="Prazo médio geral"
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
             hint={`Limite: ${limite} dias`}
             icon={AlertTriangle}
+            ajuda={AJUDA.prazoMedio}
           />
         </div>
       )}
@@ -301,8 +306,8 @@ export default function ClientesPage() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Empresa</TableHead>
                     <TableHead className="text-right">Boletos</TableHead>
-                    <TableHead className="text-right">Prazo médio</TableHead>
-                    <TableHead className="text-right">Acima do limite</TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo médio<Ajuda titulo="Prazo médio" texto={AJUDA.prazoMedio} /></span></TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acima do limite<Ajuda titulo="Acima do limite" texto={AJUDA.acimaLimite} /></span></TableHead>
                     <TableHead className="text-right">Valor em carteira</TableHead>
                     <TableHead>Últ. vencimento</TableHead>
                   </TableRow>
