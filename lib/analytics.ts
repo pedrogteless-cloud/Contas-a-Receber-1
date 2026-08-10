@@ -347,10 +347,10 @@ export function resumoClientes(
 }
 
 // ---------------------------------------------------------------------------
-// Compras (parcelamentos) — boletos do mesmo documento
+// Vendas a prazo (parcelamentos) — boletos do mesmo documento
 // ---------------------------------------------------------------------------
 
-export interface Compra {
+export interface VendaAPrazo {
   chave: string;
   documento: string;
   empresa: string;
@@ -367,7 +367,7 @@ export interface Compra {
   boletos: Boleto[];
 }
 
-export function agruparCompras(boletos: Boleto[], limite: number): Compra[] {
+export function agruparVendas(boletos: Boleto[], limite: number): VendaAPrazo[] {
   const grupos = new Map<string, Boleto[]>();
   for (const b of boletos) {
     const chave = chaveCompra(b);

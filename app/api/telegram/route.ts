@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { formatarData, formatarMoeda, type Boleto } from "@/lib/boletos";
+import {
+  chaveCompra,
+  formatarData,
+  formatarMoeda,
+  type Boleto,
+} from "@/lib/boletos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,19 +19,43 @@ interface Resultado {
   motivo: Motivo;
 }
 
-function montarMensagem(b: Boleto, limite: number): string {
+/**
+ * Monta UMA mensagem por venda. Uma venda de R$ 10.000 em 4x gera um único
+ * alerta com as parcelas listadas, em vez de quatro avisos separados.
+ */
+function montarMensagem(grupo: Boleto[], limite: number): string {
+  const ordenado = [...grupo].sort((a, b) =>
+    (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
+  );
+  const primeiro = ordenado[0];
+  const total = ordenado.reduce((s, b) => s + (b.valor ?? 0), 0);
+  const prazoRecebimento =
+    primeiro.prazo_recebimento ??
+    Math.max(...ordenado.map((b) => b.prazo_dias ?? 0));
+
   const linhas = [
-    "🔴 Boleto acima do limite de prazo",
+    "🔴 Venda acima do limite de prazo",
     "",
-    `🏢 Empresa: ${b.empresa || "—"}`,
-    `👤 Sacado: ${b.sacado || "—"}`,
-    `🔢 Nosso número: ${b.nosso_numero || "—"}`,
-    `📄 Seu número: ${b.seu_numero || "—"}`,
-    `📅 Entrada: ${formatarData(b.data_entrada)}`,
-    `⏰ Vencimento: ${formatarData(b.data_vencimento)}`,
-    `📆 Prazo: ${b.prazo_dias ?? "—"} dias (limite ${limite})`,
-    `💰 Valor: ${formatarMoeda(b.valor)}`,
+    `🏢 Empresa: ${primeiro.empresa || "—"}`,
+    `👤 Cliente: ${primeiro.sacado || "—"}`,
+    `📄 Documento: ${primeiro.documento || primeiro.seu_numero || "—"}`,
+    `💰 Valor total: ${formatarMoeda(total)}`,
+    `📅 Entrada: ${formatarData(primeiro.data_entrada)}`,
+    `⏳ Prazo de recebimento: ${prazoRecebimento} dias (limite ${limite})`,
+    "",
+    ordenado.length > 1
+      ? `📆 ${ordenado.length} parcelas:`
+      : "📆 Parcela única:",
   ];
+
+  for (const [i, b] of ordenado.entries()) {
+    linhas.push(
+      `   ${i + 1}/${ordenado.length} · ${formatarData(b.data_vencimento)} · ${formatarMoeda(
+        b.valor
+      )} · ${b.prazo_dias ?? "—"}d`
+    );
+  }
+
   return linhas.join("\n");
 }
 
@@ -58,9 +87,9 @@ async function enviarTelegram(
 }
 
 /**
- * Dispara alertas de Telegram para boletos que excederam o limite e ainda não
- * foram alertados. Marca `alerta_enviado = true` apenas quando TODOS os envios
- * daquele boleto forem bem-sucedidos. Nunca reenvia.
+ * Dispara alertas para as VENDAS que excederam o limite e ainda não foram
+ * avisadas. Marca `alerta_enviado = true` em todas as parcelas da venda apenas
+ * quando todos os envios derem certo. Nunca reenvia.
  *
  * Body opcional: { ids?: string[] } para restringir a boletos específicos.
  */
@@ -77,7 +106,6 @@ export async function POST(req: Request) {
 
   const supabase = getSupabaseAdmin();
 
-  // Boletos pendentes: excederam o limite e ainda não foram alertados.
   let query = supabase
     .from("boletos")
     .select("*")
@@ -98,7 +126,6 @@ export async function POST(req: Request) {
   const pendentesBoletos = (pendentesData ?? []) as Boleto[];
   const totalPendentes = pendentesBoletos.length;
 
-  // Sem token configurado: não quebra, apenas informa.
   if (!token) {
     console.warn("[telegram] TELEGRAM_BOT_TOKEN não configurado — nada enviado.");
     const resultado: Resultado = {
@@ -109,7 +136,6 @@ export async function POST(req: Request) {
     return NextResponse.json(resultado);
   }
 
-  // Destinatários cadastrados.
   const { data: config } = await supabase
     .from("configuracoes")
     .select("limite_prazo_dias, telegram_chat_ids")
@@ -130,12 +156,19 @@ export async function POST(req: Request) {
     return NextResponse.json(resultado);
   }
 
+  // Agrupa as parcelas por venda: um alerta por venda.
+  const vendas = new Map<string, Boleto[]>();
+  for (const b of pendentesBoletos) {
+    const chave = chaveCompra(b);
+    if (!vendas.has(chave)) vendas.set(chave, []);
+    vendas.get(chave)!.push(b);
+  }
+
   let enviados = 0;
 
-  for (const boleto of pendentesBoletos) {
-    const texto = montarMensagem(boleto, limite);
+  for (const grupo of vendas.values()) {
+    const texto = montarMensagem(grupo, limite);
 
-    // Envia para todos os destinatários; só marca se todos derem certo.
     let todosOk = true;
     for (const chatId of chatIds) {
       const ok = await enviarTelegram(token, chatId, texto);
@@ -146,11 +179,14 @@ export async function POST(req: Request) {
       const { error: updErr } = await supabase
         .from("boletos")
         .update({ alerta_enviado: true })
-        .eq("id", boleto.id);
+        .in(
+          "id",
+          grupo.map((b) => b.id)
+        );
       if (updErr) {
         console.error("[telegram] erro ao marcar alerta_enviado:", updErr);
       } else {
-        enviados++;
+        enviados += grupo.length;
       }
     }
   }

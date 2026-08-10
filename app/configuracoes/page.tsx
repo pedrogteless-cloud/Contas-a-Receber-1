@@ -18,12 +18,20 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Aviso = { tipo: "ok" | "erro"; texto: string } | null;
 
 export default function ConfiguracoesPage() {
   const [configId, setConfigId] = useState<string | null>(null);
   const [limite, setLimite] = useState<number>(60);
+  const [regra, setRegra] = useState<"venda" | "boleto">("venda");
   const [chatIds, setChatIds] = useState<string[]>([]);
   const [novoChat, setNovoChat] = useState("");
   const [carregando, setCarregando] = useState(true);
@@ -35,13 +43,14 @@ export default function ConfiguracoesPage() {
   useEffect(() => {
     supabase
       .from("configuracoes")
-      .select("id, limite_prazo_dias, telegram_chat_ids")
+      .select("id, limite_prazo_dias, telegram_chat_ids, regra_limite")
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setConfigId(data.id);
           setLimite(data.limite_prazo_dias ?? 60);
+          setRegra((data.regra_limite as "venda" | "boleto") ?? "venda");
           setChatIds(
             Array.isArray(data.telegram_chat_ids) ? data.telegram_chat_ids : []
           );
@@ -77,6 +86,7 @@ export default function ConfiguracoesPage() {
     try {
       const payload = {
         limite_prazo_dias: Number(limite) || 0,
+        regra_limite: regra,
         telegram_chat_ids: chatIds,
         updated_at: new Date().toISOString(),
       };
@@ -142,7 +152,32 @@ export default function ConfiguracoesPage() {
                 onChange={(e) => setLimite(parseInt(e.target.value) || 0)}
               />
             </div>
+            <div className="flex-1 space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                Aplicar o limite sobre
+                <Ajuda titulo="Regra do limite" texto={AJUDA.regraLimite} />
+              </Label>
+              <Select
+                value={regra}
+                onValueChange={(v) => setRegra(v as "venda" | "boleto")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="venda">
+                    Prazo de recebimento da venda
+                  </SelectItem>
+                  <SelectItem value="boleto">Prazo de cada parcela</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {regra === "venda"
+              ? "Uma venda de R$ 10.000 em 4x é avaliada como um crédito único até a última parcela (ex.: 120 dias) — e gera um alerta só."
+              : "Cada parcela é avaliada isoladamente pelo seu próprio vencimento."}
+          </p>
         </CardContent>
       </Card>
 

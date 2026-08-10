@@ -19,6 +19,12 @@ export interface Boleto {
   data_vencimento: string | null; // ISO yyyy-mm-dd
   valor: number;
   prazo_dias: number | null;
+  /** Documento da venda (base do "seu número", sem o sufixo da parcela). */
+  documento?: string | null;
+  parcela?: number | null;
+  total_parcelas?: number | null;
+  /** Dias até receber a última parcela da venda. */
+  prazo_recebimento?: number | null;
   excedeu_limite: boolean;
   alerta_enviado: boolean;
   created_at: string;
@@ -233,6 +239,68 @@ export function chaveCompra(b: {
     (b.sacado ?? "").trim().toLowerCase(),
     base.toLowerCase(),
   ].join("|");
+}
+
+export interface DadosVenda {
+  documento: string;
+  parcela: number | null;
+  total_parcelas: number;
+  /** Dias até receber a ÚLTIMA parcela da venda. */
+  prazo_recebimento: number | null;
+}
+
+/**
+ * Calcula, para cada linha, os dados da venda a que ela pertence: documento,
+ * nº da parcela, total de parcelas e o PRAZO DE RECEBIMENTO — os dias entre a
+ * entrada e o vencimento da última parcela.
+ *
+ * É esse prazo que representa a decisão de crédito: uma venda de R$ 10.000 em
+ * 4x é um crédito de ~120 dias, não quatro créditos separados.
+ *
+ * `extras` permite considerar boletos já gravados (mesma venda importada em
+ * dias diferentes) ao calcular o prazo da venda.
+ */
+export function calcularDadosVenda<
+  T extends {
+    empresa?: string | null;
+    sacado?: string | null;
+    seu_numero?: string | null;
+    nosso_numero?: string | null;
+    data_entrada?: string | null;
+    data_vencimento?: string | null;
+  },
+>(linhas: T[], extras: T[] = []): DadosVenda[] {
+  const grupos = new Map<string, T[]>();
+  for (const l of [...linhas, ...extras]) {
+    const chave = chaveCompra(l);
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(l);
+  }
+
+  return linhas.map((l) => {
+    const grupo = grupos.get(chaveCompra(l)) ?? [l];
+    const { documento, parcela } = documentoEParcela(l.seu_numero);
+
+    // Entrada mais antiga e vencimento mais distante da venda.
+    const entradas = grupo
+      .map((g) => g.data_entrada)
+      .filter((d): d is string => Boolean(d))
+      .sort();
+    const vencimentos = grupo
+      .map((g) => g.data_vencimento)
+      .filter((d): d is string => Boolean(d))
+      .sort();
+
+    return {
+      documento: documento || String(l.nosso_numero ?? "").trim(),
+      parcela,
+      total_parcelas: grupo.length,
+      prazo_recebimento: calcularPrazoDias(
+        entradas[0] ?? l.data_entrada ?? null,
+        vencimentos[vencimentos.length - 1] ?? l.data_vencimento ?? null
+      ),
+    };
+  });
 }
 
 /**

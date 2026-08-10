@@ -15,8 +15,10 @@ import { supabase } from "@/lib/supabase";
 import {
   EMPRESAS,
   abreviarNome,
+  calcularDadosVenda,
   calcularPrazoDias,
   chaveBoleto,
+  chaveCompra,
   detectarEmpresa,
   extrairDeMatriz,
   extrairDeTexto,
@@ -63,11 +65,13 @@ let uidSeq = 0;
 const novoId = () => `l${Date.now()}_${uidSeq++}`;
 
 type Aviso = { tipo: "ok" | "erro" | "info"; texto: string } | null;
+type Regra = "venda" | "boleto";
 
 export default function ImportacaoPage() {
   const [empresaPadrao, setEmpresaPadrao] = useState<string>(EMPRESAS[0]);
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
   const [limite, setLimite] = useState<number>(60);
+  const [regra, setRegra] = useState<Regra>("venda");
   const [processando, setProcessando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<Aviso>(null);
@@ -78,11 +82,12 @@ export default function ImportacaoPage() {
   useEffect(() => {
     supabase
       .from("configuracoes")
-      .select("limite_prazo_dias")
+      .select("limite_prazo_dias, regra_limite")
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data?.limite_prazo_dias != null) setLimite(data.limite_prazo_dias);
+        if (data?.regra_limite) setRegra(data.regra_limite as Regra);
       });
   }, []);
 
@@ -259,9 +264,25 @@ export default function ImportacaoPage() {
         return;
       }
 
+      // Boletos já gravados das mesmas vendas, para que o prazo de
+      // recebimento considere parcelas importadas em dias anteriores.
+      const { data: mesmasVendas } = await supabase
+        .from("boletos")
+        .select("empresa, sacado, nosso_numero, seu_numero, data_entrada, data_vencimento");
+
+      const dadosVenda = calcularDadosVenda(
+        novas,
+        (mesmasVendas ?? []) as unknown as typeof novas
+      );
+
       const hoje = new Date().toISOString().slice(0, 10);
-      const registros = novas.map((l) => {
+      const registros = novas.map((l, i) => {
         const prazo = calcularPrazoDias(l.data_entrada, l.data_vencimento);
+        const v = dadosVenda[i];
+        // O limite é avaliado pelo prazo de recebimento da venda (padrão) ou
+        // por parcela, conforme a regra escolhida em Configurações.
+        const prazoAvaliado =
+          regra === "venda" ? (v.prazo_recebimento ?? prazo) : prazo;
         return {
           data_importacao: hoje,
           empresa: l.empresa,
@@ -272,7 +293,11 @@ export default function ImportacaoPage() {
           data_vencimento: l.data_vencimento,
           valor: l.valor,
           prazo_dias: prazo,
-          excedeu_limite: prazo != null && prazo > limite,
+          documento: v.documento || null,
+          parcela: v.parcela,
+          total_parcelas: v.total_parcelas,
+          prazo_recebimento: v.prazo_recebimento,
+          excedeu_limite: prazoAvaliado != null && prazoAvaliado > limite,
           alerta_enviado: false,
         };
       });
@@ -336,14 +361,38 @@ export default function ImportacaoPage() {
     }
   }
 
+  // Prazo de recebimento (até a última parcela) de cada linha em conferência.
+  const dadosVendaPreview = useMemo(() => calcularDadosVenda(linhas), [linhas]);
+
+  const prazoAvaliadoDe = (i: number, l: LinhaEditavel) =>
+    regra === "venda"
+      ? (dadosVendaPreview[i]?.prazo_recebimento ?? l.prazo_dias)
+      : l.prazo_dias;
+
   const totalValor = useMemo(
     () => linhas.reduce((s, l) => s + (l.valor || 0), 0),
     [linhas]
   );
   const totalExcedidos = useMemo(
-    () => linhas.filter((l) => l.prazo_dias != null && l.prazo_dias > limite).length,
-    [linhas, limite]
+    () =>
+      linhas.filter((l, i) => {
+        const p = prazoAvaliadoDe(i, l);
+        return p != null && p > limite;
+      }).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [linhas, limite, regra, dadosVendaPreview]
   );
+
+  // Quantas VENDAS distintas estão acima do limite (o alerta é por venda).
+  const vendasExcedidas = useMemo(() => {
+    if (regra !== "venda") return null;
+    const chaves = new Set<string>();
+    linhas.forEach((l, i) => {
+      const p = dadosVendaPreview[i]?.prazo_recebimento;
+      if (p != null && p > limite) chaves.add(chaveCompra(l));
+    });
+    return chaves.size;
+  }, [linhas, limite, regra, dadosVendaPreview]);
 
   return (
     <div className="space-y-6">
@@ -481,7 +530,9 @@ export default function ImportacaoPage() {
                   <span className="font-medium text-foreground">{formatarMoeda(totalValor)}</span>
                   <span className="text-border">•</span>
                   <span className={totalExcedidos > 0 ? "text-red-600 dark:text-red-400" : ""}>
-                    {totalExcedidos} acima do limite ({limite} dias)
+                    {vendasExcedidas != null
+                      ? `${vendasExcedidas} venda(s) acima do limite (${limite} dias) · ${totalExcedidos} parcela(s)`
+                      : `${totalExcedidos} acima do limite (${limite} dias)`}
                   </span>
                 </CardDescription>
               </div>
@@ -511,14 +562,16 @@ export default function ImportacaoPage() {
                     <TableHead>Entrada</TableHead>
                     <TableHead>Vencimento</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Prazo<Ajuda titulo="Prazo" texto={AJUDA.prazoDias} /></span></TableHead>
+                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Prazo<Ajuda titulo="Prazo da parcela" texto={AJUDA.prazoDias} /></span></TableHead>
+                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Recebimento<Ajuda titulo="Prazo de recebimento" texto={AJUDA.prazoRecebimento} /></span></TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {linhas.map((l) => {
-                    const excede = l.prazo_dias != null && l.prazo_dias > limite;
-                    const dentro = l.prazo_dias != null && l.prazo_dias <= limite;
+                  {linhas.map((l, idx) => {
+                    const prazoAval = prazoAvaliadoDe(idx, l);
+                    const excede = prazoAval != null && prazoAval > limite;
+                    const dentro = prazoAval != null && prazoAval <= limite;
                     return (
                       <TableRow
                         key={l._id}
@@ -608,14 +661,28 @@ export default function ImportacaoPage() {
                             }
                           />
                         </TableCell>
+                        <TableCell className="text-center tabular-nums text-muted-foreground">
+                          {l.prazo_dias == null ? "—" : `${l.prazo_dias}d`}
+                        </TableCell>
                         <TableCell className="text-center">
-                          {l.prazo_dias == null ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : (
-                            <Badge variant={excede ? "destructive" : "success"}>
-                              {l.prazo_dias}d
-                            </Badge>
-                          )}
+                          {(() => {
+                            const pr = dadosVendaPreview[idx]?.prazo_recebimento;
+                            const tp = dadosVendaPreview[idx]?.total_parcelas ?? 1;
+                            if (pr == null)
+                              return <span className="text-muted-foreground">—</span>;
+                            return (
+                              <div className="flex flex-col items-center leading-tight">
+                                <Badge variant={excede ? "destructive" : "success"}>
+                                  {pr}d
+                                </Badge>
+                                {tp > 1 && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {tp}x
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Button

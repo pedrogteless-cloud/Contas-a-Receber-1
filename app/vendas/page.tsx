@@ -10,7 +10,7 @@ import {
   formatarMoeda,
   type Boleto,
 } from "@/lib/boletos";
-import { agruparCompras } from "@/lib/analytics";
+import { agruparVendas } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -51,7 +51,7 @@ const OPCOES_EMPRESA = [
   "Não classificado",
 ] as const;
 
-export default function ComprasPage() {
+export default function VendasPage() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [limite, setLimite] = useState(60);
   const [carregando, setCarregando] = useState(true);
@@ -76,11 +76,11 @@ export default function ComprasPage() {
     });
   }, []);
 
-  const compras = useMemo(() => {
+  const vendas = useMemo(() => {
     const base = boletos.filter((b) =>
       empresa === "Todas" ? true : (b.empresa || "Não classificado") === empresa
     );
-    let lista = agruparCompras(base, limite);
+    let lista = agruparVendas(base, limite);
 
     const termo = busca.trim().toLowerCase();
     if (termo) {
@@ -94,15 +94,15 @@ export default function ComprasPage() {
     return lista;
   }, [boletos, empresa, limite, busca, soParceladas]);
 
-  const totalCompras = compras.length;
-  const parceladas = compras.filter((c) => c.parcelas > 1).length;
-  const valorTotal = compras.reduce((s, c) => s + c.valorTotal, 0);
+  const totalVendas = vendas.length;
+  const parceladas = vendas.filter((c) => c.parcelas > 1).length;
+  const valorTotal = vendas.reduce((s, c) => s + c.valorTotal, 0);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Compras"
-        description="Boletos agrupados por compra: cada linha é uma venda e suas parcelas."
+        title="Vendas a prazo"
+        description="Cada linha é uma venda a prazo, com suas parcelas agrupadas."
       >
         <div className="space-y-1">
           <Label className="text-xs">Empresa</Label>
@@ -129,7 +129,7 @@ export default function ComprasPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todas">Todas as compras</SelectItem>
+              <SelectItem value="todas">Todas as vendas</SelectItem>
               <SelectItem value="parceladas">Só parceladas (2x ou +)</SelectItem>
             </SelectContent>
           </Select>
@@ -145,23 +145,23 @@ export default function ComprasPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
           <StatCard
-            label="Compras"
-            value={String(totalCompras)}
+            label="Vendas a prazo"
+            value={String(totalVendas)}
             hint={`${parceladas} parcelada(s)`}
             icon={Layers}
             tom="brand"
-            ajuda={AJUDA.compra}
+            ajuda={AJUDA.venda}
           />
           <StatCard
             label="Valor total"
             value={formatarMoeda(valorTotal)}
             icon={Wallet}
             tom="success"
-            ajuda={AJUDA.valorTotalCompra}
+            ajuda={AJUDA.valorTotalVenda}
           />
           <StatCard
             label="Boletos agrupados"
-            value={String(compras.reduce((s, c) => s + c.parcelas, 0))}
+            value={String(vendas.reduce((s, c) => s + c.parcelas, 0))}
             hint={`Limite: ${limite} dias`}
             icon={Layers}
             ajuda={AJUDA.limite}
@@ -174,8 +174,8 @@ export default function ComprasPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-1.5 text-base">
-                Compras e parcelas
-                <Ajuda titulo="Como agrupamos" texto={AJUDA.compra} />
+                Vendas e parcelas
+                <Ajuda titulo="Como agrupamos" texto={AJUDA.venda} />
               </CardTitle>
               <CardDescription>
                 Clique numa linha para ver as parcelas.
@@ -195,9 +195,9 @@ export default function ComprasPage() {
         <CardContent>
           {carregando ? (
             <Skeleton className="h-48 w-full" />
-          ) : compras.length === 0 ? (
+          ) : vendas.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nenhuma compra encontrada. Importe um relatório na aba Importação.
+              Nenhuma venda encontrada. Importe um relatório na aba Importação.
             </p>
           ) : (
             <div className="overflow-x-auto scroll-thin">
@@ -213,11 +213,11 @@ export default function ComprasPage() {
                     <TableHead className="text-right">Valor total</TableHead>
                     <TableHead>1º venc.</TableHead>
                     <TableHead>Último venc.</TableHead>
-                    <TableHead className="text-right">Prazo final</TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo receb.<Ajuda titulo="Prazo de recebimento" texto={AJUDA.prazoRecebimento} /></span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {compras.map((c) => {
+                  {vendas.map((c) => {
                     const expandida = aberta === c.chave;
                     const excede = c.acimaLimite > 0;
                     return (

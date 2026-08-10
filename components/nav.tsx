@@ -39,7 +39,12 @@ const LINKS: LinkNav[] = [
     ajuda: AJUDA.abaDashboard,
   },
   { href: "/clientes", label: "Clientes", icon: Users, ajuda: AJUDA.abaClientes },
-  { href: "/compras", label: "Compras", icon: Layers, ajuda: AJUDA.abaCompras },
+  {
+    href: "/vendas",
+    label: "Vendas a prazo",
+    icon: Layers,
+    ajuda: AJUDA.abaVendas,
+  },
   {
     href: "/historico",
     label: "Histórico",

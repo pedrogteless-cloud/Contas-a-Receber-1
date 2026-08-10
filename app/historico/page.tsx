@@ -164,7 +164,11 @@ export default function HistoricoPage() {
       "Seu número": b.seu_numero || "",
       Entrada: formatarData(b.data_entrada),
       Vencimento: formatarData(b.data_vencimento),
-      "Prazo (dias)": b.prazo_dias ?? "",
+      "Prazo parcela (dias)": b.prazo_dias ?? "",
+      "Prazo recebimento (dias)": b.prazo_recebimento ?? "",
+      Documento: b.documento ?? "",
+      Parcela: b.parcela ?? "",
+      "Total parcelas": b.total_parcelas ?? "",
       Valor: b.valor ?? 0,
       "Acima do limite": b.excedeu_limite ? "Sim" : "Não",
       Alerta: b.alerta_enviado
@@ -177,7 +181,8 @@ export default function HistoricoPage() {
     const ws = XLSX.utils.json_to_sheet(linhas);
     ws["!cols"] = [
       { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
+      { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 9 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Boletos");
@@ -365,7 +370,8 @@ export default function HistoricoPage() {
                     <TableHead>Nosso nº</TableHead>
                     <TableHead>Entrada</TableHead>
                     <TableHead>Vencimento</TableHead>
-                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Prazo<Ajuda titulo="Prazo" texto={AJUDA.prazoDias} /></span></TableHead>
+                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Prazo<Ajuda titulo="Prazo da parcela" texto={AJUDA.prazoDias} /></span></TableHead>
+                    <TableHead className="text-center"><span className="inline-flex items-center gap-1">Recebimento<Ajuda titulo="Prazo de recebimento" texto={AJUDA.prazoRecebimento} /></span></TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead><span className="inline-flex items-center gap-1">Alerta<Ajuda titulo="Alerta" texto={AJUDA.alertaStatus} /></span></TableHead>
                   </TableRow>
@@ -396,8 +402,13 @@ export default function HistoricoPage() {
                       <TableCell className="font-mono text-xs">{b.nosso_numero || "—"}</TableCell>
                       <TableCell>{formatarData(b.data_entrada)}</TableCell>
                       <TableCell>{formatarData(b.data_vencimento)}</TableCell>
+                      <TableCell className="text-center tabular-nums text-muted-foreground">
+                        {b.prazo_dias ?? "—"}d
+                      </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="destructive">{b.prazo_dias ?? "—"}d</Badge>
+                        <Badge variant="destructive">
+                          {b.prazo_recebimento ?? b.prazo_dias ?? "—"}d
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatarMoeda(b.valor)}

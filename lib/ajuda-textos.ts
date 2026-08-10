@@ -12,8 +12,8 @@ export const AJUDA = {
     "Visão geral da carteira: prazo médio, valor a receber, quanto está acima do limite e como os prazos evoluem mês a mês.",
   abaClientes:
     "Análise por cliente: prazo médio que cada um recebe, valor em carteira e quantos boletos passaram do limite.",
-  abaCompras:
-    "Agrupa os boletos que fazem parte da mesma compra parcelada. Ex.: uma venda de R$ 10.000 em 4x aparece como uma linha só, com as 4 parcelas.",
+  abaVendas:
+    "Agrupa os boletos da mesma venda a prazo. Ex.: uma venda de R$ 10.000 em 4x aparece como uma linha só, com as 4 parcelas e o prazo de recebimento total.",
   abaHistorico:
     "Todas as importações já feitas, com filtros por data, empresa e cliente, e a lista dos boletos acima do limite.",
   abaConfiguracoes:
@@ -30,6 +30,10 @@ export const AJUDA = {
     "Mesma conta do prazo médio ponderado, considerando só os boletos daquela empresa.",
   prazoMedioSimples:
     "Média simples: soma dos prazos ÷ quantidade de boletos. Cada boleto pesa igual, independentemente do valor. Serve para ver o prazo típico concedido por título — não o risco financeiro.",
+  regraLimite:
+    "Prazo de recebimento da venda (recomendado): a venda inteira é avaliada pelo tempo até a ÚLTIMA parcela — R$ 10.000 em 4x é um crédito de ~120 dias, e o alerta sai uma vez só. Prazo de cada parcela: avalia cada boleto isolado, o que gera vários alertas para a mesma venda.",
+  prazoRecebimento:
+    "Dias entre a entrada e o vencimento da ÚLTIMA parcela da venda — o tempo total até receber tudo daquela compra. É o que representa a decisão de crédito.",
   limite:
     "Limite de prazo definido em Configurações (padrão 60 dias). Boletos com prazo acima disso são marcados em vermelho e geram alerta.",
   acimaLimite:
@@ -61,13 +65,13 @@ export const AJUDA = {
   duplicados:
     "Boletos já importados antes são ignorados automaticamente (compara empresa, nosso número, seu número, vencimento e valor). Pode reimportar o mesmo arquivo sem duplicar.",
 
-  // Compras
-  compra:
-    "Uma compra é o conjunto de boletos do mesmo documento. O sistema identifica pelo 'seu número': 442415-01, 442415-02 e 442415-03 são 3 parcelas da mesma compra.",
-  valorTotalCompra:
-    "Soma de todas as parcelas da compra — o valor cheio da venda.",
+  // Vendas a prazo
+  venda:
+    "Uma venda a prazo é o conjunto de boletos do mesmo documento. O sistema identifica pelo 'seu número': 442415-01, 442415-02 e 442415-03 são 3 parcelas da mesma venda.",
+  valorTotalVenda:
+    "Soma de todas as parcelas — o valor cheio da venda a prazo.",
   prazoUltimaParcela:
-    "Prazo em dias da parcela que vence por último. É o tempo total até receber tudo daquela compra.",
+    "Prazo em dias da parcela que vence por último. É o tempo total até receber tudo daquela venda.",
 
   // Histórico / ações
   alertaStatus:
