@@ -29,7 +29,10 @@ function hojeISO(): string {
 // Métricas simples
 // ---------------------------------------------------------------------------
 
-/** Prazo médio (dias corridos) de todos os boletos com prazo definido. */
+/**
+ * Prazo médio SIMPLES: cada boleto pesa igual.
+ * Responde "que prazo costumamos conceder por título".
+ */
 export function prazoMedio(boletos: Boleto[]): number | null {
   const prazos = boletos
     .map((b) => b.prazo_dias)
@@ -37,12 +40,43 @@ export function prazoMedio(boletos: Boleto[]): number | null {
   return media(prazos);
 }
 
-/** Prazo médio filtrando por empresa. */
+/**
+ * Prazo médio PONDERADO PELO VALOR (PMR) — a métrica financeira correta:
+ * cada boleto pesa proporcionalmente ao quanto representa em dinheiro.
+ *
+ *   PMR = Σ(valor × prazo) ÷ Σ(valor)
+ *
+ * Responde "quanto tempo, em média, o dinheiro fica na rua". Um título de
+ * R$ 10.000 a 90 dias pesa muito mais do que dez de R$ 100 a 30 dias.
+ */
+export function prazoMedioPonderado(boletos: Boleto[]): number | null {
+  let somaValor = 0;
+  let somaProduto = 0;
+  for (const b of boletos) {
+    const prazo = b.prazo_dias;
+    const valor = b.valor ?? 0;
+    if (typeof prazo !== "number" || valor <= 0) continue;
+    somaValor += valor;
+    somaProduto += valor * prazo;
+  }
+  if (somaValor <= 0) return null;
+  return Math.round((somaProduto / somaValor) * 10) / 10;
+}
+
+/** Prazo médio simples filtrando por empresa. */
 export function prazoMedioEmpresa(
   boletos: Boleto[],
   empresa: string
 ): number | null {
   return prazoMedio(boletos.filter((b) => b.empresa === empresa));
+}
+
+/** Prazo médio ponderado filtrando por empresa. */
+export function prazoMedioPonderadoEmpresa(
+  boletos: Boleto[],
+  empresa: string
+): number | null {
+  return prazoMedioPonderado(boletos.filter((b) => b.empresa === empresa));
 }
 
 /** Valor total em carteira. */
@@ -121,7 +155,7 @@ export function prazoMedioPorEmpresa(boletos: Boleto[]): ResumoEmpresa[] {
   return Array.from(grupos.entries())
     .map(([empresa, lista]) => ({
       empresa,
-      prazoMedio: prazoMedio(lista),
+      prazoMedio: prazoMedioPonderado(lista),
       quantidade: lista.length,
       valor: valorTotal(lista),
     }))
@@ -197,8 +231,8 @@ export function evolucaoMensalPrazo(
   boletos: Boleto[],
   empresas: string[]
 ): PontoEvolucao[] {
-  // mapa mesISO -> empresa -> prazos[]
-  const mapa = new Map<string, Map<string, number[]>>();
+  // mapa mesISO -> empresa -> boletos (ponderamos pelo valor no fim)
+  const mapa = new Map<string, Map<string, Boleto[]>>();
 
   for (const b of boletos) {
     if (!b.data_vencimento || typeof b.prazo_dias !== "number") continue;
@@ -207,7 +241,7 @@ export function evolucaoMensalPrazo(
     if (!mapa.has(mesISO)) mapa.set(mesISO, new Map());
     const porEmpresa = mapa.get(mesISO)!;
     if (!porEmpresa.has(empresa)) porEmpresa.set(empresa, []);
-    porEmpresa.get(empresa)!.push(b.prazo_dias);
+    porEmpresa.get(empresa)!.push(b);
   }
 
   const listaEmpresas =
@@ -223,7 +257,7 @@ export function evolucaoMensalPrazo(
       const ponto: PontoEvolucao = { mes: rotulo, mesISO };
       const porEmpresa = mapa.get(mesISO)!;
       for (const emp of listaEmpresas) {
-        ponto[emp] = media(porEmpresa.get(emp) ?? []);
+        ponto[emp] = prazoMedioPonderado(porEmpresa.get(emp) ?? []);
       }
       return ponto;
     });
@@ -252,7 +286,7 @@ export function topClientes(boletos: Boleto[], limite = 10): ClienteResumo[] {
       sacado,
       valor: valorTotal(lista),
       quantidade: lista.length,
-      prazoMedio: prazoMedio(lista),
+      prazoMedio: prazoMedioPonderado(lista),
     }))
     .sort((a, b) => b.valor - a.valor)
     .slice(0, limite);
@@ -267,7 +301,8 @@ export interface ClienteDetalhe {
   empresas: string[];
   quantidade: number;
   valor: number;
-  prazoMedio: number | null;
+  prazoMedio: number | null; // ponderado pelo valor (PMR)
+  prazoMedioSimples: number | null; // cada boleto pesa igual
   acimaLimite: number;
   percentualAcima: number; // 0-100
   ultimoVencimento: string | null; // ISO
@@ -300,7 +335,8 @@ export function resumoClientes(
         ),
         quantidade: lista.length,
         valor: valorTotal(lista),
-        prazoMedio: prazoMedio(lista),
+        prazoMedio: prazoMedioPonderado(lista),
+        prazoMedioSimples: prazoMedio(lista),
         acimaLimite: acima,
         percentualAcima:
           lista.length > 0 ? Math.round((acima / lista.length) * 1000) / 10 : 0,
@@ -371,7 +407,7 @@ export function agruparCompras(boletos: Boleto[], limite: number): Compra[] {
         entrada: entradas[0] ?? null,
         primeiroVencimento: vencs[0] ?? null,
         ultimoVencimento: vencs[vencs.length - 1] ?? null,
-        prazoMedio: media(prazos),
+        prazoMedio: prazoMedioPonderado(ordenada),
         prazoUltima: prazos.length ? Math.max(...prazos) : null,
         acimaLimite: prazos.filter((p) => p > limite).length,
         boletos: ordenada,
@@ -388,15 +424,25 @@ export function gerarInsights(boletos: Boleto[], limite: number): string[] {
   const insights: string[] = [];
   if (boletos.length === 0) return insights;
 
-  const pm = prazoMedio(boletos);
+  const pm = prazoMedioPonderado(boletos);
+  const pmSimples = prazoMedio(boletos);
   if (pm != null) {
     if (pm > limite) {
       insights.push(
-        `O prazo médio da carteira (${pm} dias) está acima do limite de ${limite} dias.`
+        `O prazo médio ponderado da carteira (${pm} dias) está acima do limite de ${limite} dias.`
       );
     } else {
       insights.push(
-        `O prazo médio da carteira (${pm} dias) está dentro do limite de ${limite} dias.`
+        `O prazo médio ponderado da carteira (${pm} dias) está dentro do limite de ${limite} dias.`
+      );
+    }
+    // Diferença relevante entre as duas médias indica concentração de valor
+    // nos títulos mais longos (ou mais curtos).
+    if (pmSimples != null && Math.abs(pm - pmSimples) >= 7) {
+      insights.push(
+        pm > pmSimples
+          ? `Atenção: o valor está concentrado nos títulos mais longos — ponderado ${pm} dias contra ${pmSimples} dias na média simples.`
+          : `O valor está concentrado nos títulos mais curtos — ponderado ${pm} dias contra ${pmSimples} dias na média simples.`
       );
     }
   }

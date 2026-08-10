@@ -21,7 +21,12 @@ import {
   formatarMoeda,
   type Boleto,
 } from "@/lib/boletos";
-import { prazoMedio, resumoClientes, valorTotal } from "@/lib/analytics";
+import {
+  prazoMedio,
+  prazoMedioPonderado,
+  resumoClientes,
+  valorTotal,
+} from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
 import { CHART, corEmpresa } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
@@ -113,7 +118,8 @@ export default function ClientesPage() {
   }, [filtradosBase, busca, limite, ordem]);
 
   const totalCarteira = valorTotal(filtradosBase);
-  const pmGeral = prazoMedio(filtradosBase);
+  const pmGeral = prazoMedioPonderado(filtradosBase);
+  const pmSimplesGeral = prazoMedio(filtradosBase);
 
   // Top 12 clientes por prazo médio, para o gráfico.
   const grafico = useMemo(
@@ -199,9 +205,13 @@ export default function ClientesPage() {
             ajuda={AJUDA.valorCarteira}
           />
           <StatCard
-            label="Prazo médio geral"
+            label="Prazo médio (ponderado)"
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
-            hint={`Limite: ${limite} dias`}
+            hint={
+              pmSimplesGeral != null
+                ? `Média simples: ${pmSimplesGeral} dias · limite ${limite}`
+                : `Limite: ${limite} dias`
+            }
             icon={AlertTriangle}
             ajuda={AJUDA.prazoMedio}
           />
@@ -211,7 +221,7 @@ export default function ClientesPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            Prazo médio por cliente (top 12)
+            Prazo médio ponderado por cliente (top 12)
           </CardTitle>
           <CardDescription>
             Barras acima da linha tracejada estão acima do limite de {limite}{" "}
@@ -342,9 +352,23 @@ export default function ClientesPage() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {c.prazoMedio != null ? (
-                            <span className={alto ? "font-semibold text-red-600 dark:text-red-400" : ""}>
-                              {c.prazoMedio} dias
-                            </span>
+                            <div className="flex flex-col items-end leading-tight">
+                              <span
+                                className={
+                                  alto
+                                    ? "font-semibold text-red-600 dark:text-red-400"
+                                    : "font-medium"
+                                }
+                              >
+                                {c.prazoMedio} dias
+                              </span>
+                              {c.prazoMedioSimples != null &&
+                                c.prazoMedioSimples !== c.prazoMedio && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    simples: {c.prazoMedioSimples}d
+                                  </span>
+                                )}
+                            </div>
                           ) : (
                             "—"
                           )}

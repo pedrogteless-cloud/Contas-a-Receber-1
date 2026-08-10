@@ -36,7 +36,8 @@ import {
   gerarInsights,
   participacaoPorEmpresa,
   prazoMedio,
-  prazoMedioEmpresa,
+  prazoMedioPonderado,
+  prazoMedioPonderadoEmpresa,
   prazoMedioPorEmpresa,
   topClientes,
   valorTotal,
@@ -121,9 +122,10 @@ export default function DashboardPage() {
     });
   }, [boletos, empresa, vencIni, vencFim]);
 
-  const pmGeral = prazoMedio(dados);
-  const pmMoveis = prazoMedioEmpresa(dados, "Ley Móveis");
-  const pmColchoes = prazoMedioEmpresa(dados, "Ley Colchões");
+  const pmGeral = prazoMedioPonderado(dados);
+  const pmSimples = prazoMedio(dados);
+  const pmMoveis = prazoMedioPonderadoEmpresa(dados, "Ley Móveis");
+  const pmColchoes = prazoMedioPonderadoEmpresa(dados, "Ley Colchões");
   const total = valorTotal(dados);
   const est = estatisticasLimite(dados, limite);
   const aVencer = aVencerEmDias(dados, 7);
@@ -205,8 +207,11 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
-            label="Prazo médio geral"
+            label="Prazo médio (ponderado)"
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
+            hint={
+              pmSimples != null ? `Média simples: ${pmSimples} dias` : undefined
+            }
             icon={Gauge}
             tom="brand"
             ajuda={AJUDA.prazoMedio}
