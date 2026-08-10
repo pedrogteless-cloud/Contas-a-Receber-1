@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   AlertTriangle,
+  Download,
   FileStack,
   Gauge,
   Loader2,
@@ -152,12 +154,49 @@ export default function HistoricoPage() {
     }
   }
 
+  function exportarExcel() {
+    const linhas = filtrados.map((b) => ({
+      Empresa: b.empresa || "",
+      Sacado: b.sacado || "",
+      "Nosso número": b.nosso_numero || "",
+      "Seu número": b.seu_numero || "",
+      Entrada: formatarData(b.data_entrada),
+      Vencimento: formatarData(b.data_vencimento),
+      "Prazo (dias)": b.prazo_dias ?? "",
+      Valor: b.valor ?? 0,
+      "Acima do limite": b.excedeu_limite ? "Sim" : "Não",
+      Alerta: b.alerta_enviado
+        ? "Enviado"
+        : b.excedeu_limite
+          ? "Pendente"
+          : "",
+      "Data importação": formatarData(b.data_importacao),
+    }));
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    ws["!cols"] = [
+      { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Boletos");
+    const hoje = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `contas-a-receber-${hoje}.xlsx`);
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Histórico"
         description="Consulte importações e boletos acima do limite de prazo."
-      />
+      >
+        <Button
+          variant="outline"
+          onClick={exportarExcel}
+          disabled={filtrados.length === 0}
+        >
+          <Download /> Exportar Excel
+        </Button>
+      </PageHeader>
 
       {carregando ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

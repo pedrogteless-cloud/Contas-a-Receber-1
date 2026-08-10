@@ -197,6 +197,26 @@ export function detectarEmpresa(texto: string): string | null {
   return null;
 }
 
+/**
+ * Chave de identidade de um boleto, usada para detectar duplicados entre
+ * importações (empresa + nosso número + seu número + vencimento + valor).
+ */
+export function chaveBoleto(b: {
+  empresa?: string | null;
+  nosso_numero?: string | null;
+  seu_numero?: string | null;
+  data_vencimento?: string | null;
+  valor?: number | null;
+}): string {
+  return [
+    (b.empresa ?? "").trim().toLowerCase(),
+    (b.nosso_numero ?? "").trim().toLowerCase(),
+    (b.seu_numero ?? "").trim().toLowerCase(),
+    b.data_vencimento ?? "",
+    Number(b.valor ?? 0).toFixed(2),
+  ].join("|");
+}
+
 // ---------------------------------------------------------------------------
 // Extração a partir da matriz do XLSX (SheetJS header:1)
 // ---------------------------------------------------------------------------

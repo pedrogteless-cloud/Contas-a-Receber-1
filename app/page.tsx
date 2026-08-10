@@ -16,6 +16,7 @@ import {
   EMPRESAS,
   abreviarNome,
   calcularPrazoDias,
+  chaveBoleto,
   detectarEmpresa,
   extrairDeMatriz,
   extrairDeTexto,
@@ -228,8 +229,36 @@ export default function ImportacaoPage() {
     setSalvando(true);
     setAviso(null);
     try {
+      // Evita duplicados: monta as chaves das linhas e compara com o que já
+      // existe no banco (e com repetições dentro do próprio lote).
+      const { data: existentes } = await supabase
+        .from("boletos")
+        .select("empresa, nosso_numero, seu_numero, data_vencimento, valor");
+      const jaExiste = new Set(
+        (existentes ?? []).map((b) => chaveBoleto(b as Parameters<typeof chaveBoleto>[0]))
+      );
+
+      const vistas = new Set<string>();
+      const novas = linhas.filter((l) => {
+        const chave = chaveBoleto(l);
+        if (jaExiste.has(chave) || vistas.has(chave)) return false;
+        vistas.add(chave);
+        return true;
+      });
+      const ignorados = linhas.length - novas.length;
+
+      if (novas.length === 0) {
+        setLinhas([]);
+        setNomeArquivo("");
+        setAviso({
+          tipo: "info",
+          texto: `Nada novo: os ${linhas.length} boleto(s) já haviam sido importados.`,
+        });
+        return;
+      }
+
       const hoje = new Date().toISOString().slice(0, 10);
-      const registros = linhas.map((l) => {
+      const registros = novas.map((l) => {
         const prazo = calcularPrazoDias(l.data_entrada, l.data_vencimento);
         return {
           data_importacao: hoje,
@@ -283,7 +312,9 @@ export default function ImportacaoPage() {
       setNomeArquivo("");
       setAviso({
         tipo: "ok",
-        texto: `${registros.length} boleto(s) importado(s). ${idsExcedidos.length} acima do limite.${msgTelegram}`,
+        texto: `${registros.length} boleto(s) importado(s)${
+          ignorados > 0 ? ` · ${ignorados} já existiam (ignorados)` : ""
+        }. ${idsExcedidos.length} acima do limite.${msgTelegram}`,
       });
     } catch (err) {
       console.error(err);

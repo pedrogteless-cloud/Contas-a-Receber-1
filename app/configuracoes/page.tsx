@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Loader2, LogOut, Plus, Save, Trash2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -209,6 +209,27 @@ export default function ConfiguracoesPage() {
           </span>
         )}
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Acesso</CardTitle>
+          <CardDescription>
+            Sair encerra a sessão neste dispositivo (só tem efeito se o login por
+            senha estiver ativado).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              await fetch("/api/logout", { method: "POST" });
+              window.location.href = "/login";
+            }}
+          >
+            <LogOut /> Sair
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

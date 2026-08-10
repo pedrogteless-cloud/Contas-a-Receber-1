@@ -254,6 +254,58 @@ export function topClientes(boletos: Boleto[], limite = 10): ClienteResumo[] {
 }
 
 // ---------------------------------------------------------------------------
+// Resumo por cliente (sacado)
+// ---------------------------------------------------------------------------
+
+export interface ClienteDetalhe {
+  sacado: string;
+  empresas: string[];
+  quantidade: number;
+  valor: number;
+  prazoMedio: number | null;
+  acimaLimite: number;
+  percentualAcima: number; // 0-100
+  ultimoVencimento: string | null; // ISO
+}
+
+export function resumoClientes(
+  boletos: Boleto[],
+  limite: number
+): ClienteDetalhe[] {
+  const grupos = new Map<string, Boleto[]>();
+  for (const b of boletos) {
+    const chave = b.sacado || "—";
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(b);
+  }
+
+  return Array.from(grupos.entries())
+    .map(([sacado, lista]) => {
+      const acima = lista.filter(
+        (b) => typeof b.prazo_dias === "number" && b.prazo_dias > limite
+      ).length;
+      const vencs = lista
+        .map((b) => b.data_vencimento)
+        .filter((v): v is string => Boolean(v))
+        .sort();
+      return {
+        sacado,
+        empresas: Array.from(
+          new Set(lista.map((b) => b.empresa || "Não classificado"))
+        ),
+        quantidade: lista.length,
+        valor: valorTotal(lista),
+        prazoMedio: prazoMedio(lista),
+        acimaLimite: acima,
+        percentualAcima:
+          lista.length > 0 ? Math.round((acima / lista.length) * 1000) / 10 : 0,
+        ultimoVencimento: vencs.length ? vencs[vencs.length - 1] : null,
+      };
+    })
+    .sort((a, b) => b.valor - a.valor);
+}
+
+// ---------------------------------------------------------------------------
 // Insights automáticos
 // ---------------------------------------------------------------------------
 

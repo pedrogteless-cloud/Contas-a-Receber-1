@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileUp, LayoutDashboard, History, Settings } from "lucide-react";
+import {
+  FileUp,
+  LayoutDashboard,
+  History,
+  Settings,
+  Users,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
@@ -11,12 +17,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const LINKS = [
   { href: "/", label: "Importação", icon: FileUp },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/historico", label: "Histórico", icon: History },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export function Nav() {
   const pathname = usePathname();
+
+  if (pathname === "/login") return null;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-lg">
