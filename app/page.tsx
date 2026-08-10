@@ -18,7 +18,7 @@ import {
   calcularDadosVenda,
   calcularPrazoDias,
   chaveBoleto,
-  chaveCompra,
+  chaveVenda,
   detectarEmpresa,
   extrairDeMatriz,
   extrairDeTexto,
@@ -389,7 +389,7 @@ export default function ImportacaoPage() {
     const chaves = new Set<string>();
     linhas.forEach((l, i) => {
       const p = dadosVendaPreview[i]?.prazo_recebimento;
-      if (p != null && p > limite) chaves.add(chaveCompra(l));
+      if (p != null && p > limite) chaves.add(chaveVenda(l));
     });
     return chaves.size;
   }, [linhas, limite, regra, dadosVendaPreview]);

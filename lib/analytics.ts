@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  chaveCompra,
+  chaveVenda,
   documentoEParcela,
   formatarMoeda,
   type Boleto,
@@ -370,7 +370,7 @@ export interface VendaAPrazo {
 export function agruparVendas(boletos: Boleto[], limite: number): VendaAPrazo[] {
   const grupos = new Map<string, Boleto[]>();
   for (const b of boletos) {
-    const chave = chaveCompra(b);
+    const chave = chaveVenda(b);
     if (!grupos.has(chave)) grupos.set(chave, []);
     grupos.get(chave)!.push(b);
   }

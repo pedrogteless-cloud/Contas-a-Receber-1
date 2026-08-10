@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
-  chaveCompra,
+  chaveVenda,
   formatarData,
   formatarMoeda,
   type Boleto,
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
   // Agrupa as parcelas por venda: um alerta por venda.
   const vendas = new Map<string, Boleto[]>();
   for (const b of pendentesBoletos) {
-    const chave = chaveCompra(b);
+    const chave = chaveVenda(b);
     if (!vendas.has(chave)) vendas.set(chave, []);
     vendas.get(chave)!.push(b);
   }

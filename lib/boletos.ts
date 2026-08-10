@@ -204,11 +204,11 @@ export function detectarEmpresa(texto: string): string | null {
 }
 
 /**
- * Identifica a COMPRA (documento) e a parcela a partir do "seu número".
+ * Identifica a VENDA (documento) e a parcela a partir do "seu número".
  *
  * Os bancos numeram as parcelas com um sufixo: uma venda parcelada aparece
  * como 442415-01, 442415-02, 442415-03 (Sicoob) ou 53893-1 ... 53893-6
- * (Itaú). A base antes do último hífen identifica a compra.
+ * (Itaú). A base antes do último hífen identifica a venda.
  */
 export function documentoEParcela(seuNumero: string | null | undefined): {
   documento: string;
@@ -223,10 +223,10 @@ export function documentoEParcela(seuNumero: string | null | undefined): {
 }
 
 /**
- * Chave da compra: empresa + sacado + documento. Boletos com a mesma chave são
- * parcelas do mesmo parcelamento (ex.: R$ 10.000 em 4x de R$ 2.500).
+ * Chave da venda: empresa + sacado + documento. Boletos com a mesma chave são
+ * parcelas da mesma venda a prazo (ex.: R$ 10.000 em 4x de R$ 2.500).
  */
-export function chaveCompra(b: {
+export function chaveVenda(b: {
   empresa?: string | null;
   sacado?: string | null;
   seu_numero?: string | null;
@@ -272,13 +272,13 @@ export function calcularDadosVenda<
 >(linhas: T[], extras: T[] = []): DadosVenda[] {
   const grupos = new Map<string, T[]>();
   for (const l of [...linhas, ...extras]) {
-    const chave = chaveCompra(l);
+    const chave = chaveVenda(l);
     if (!grupos.has(chave)) grupos.set(chave, []);
     grupos.get(chave)!.push(l);
   }
 
   return linhas.map((l) => {
-    const grupo = grupos.get(chaveCompra(l)) ?? [l];
+    const grupo = grupos.get(chaveVenda(l)) ?? [l];
     const { documento, parcela } = documentoEParcela(l.seu_numero);
 
     // Entrada mais antiga e vencimento mais distante da venda.

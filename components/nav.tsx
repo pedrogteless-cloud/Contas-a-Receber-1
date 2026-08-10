@@ -41,7 +41,7 @@ const LINKS: LinkNav[] = [
   { href: "/clientes", label: "Clientes", icon: Users, ajuda: AJUDA.abaClientes },
   {
     href: "/vendas",
-    label: "Vendas a prazo",
+    label: "Vendas",
     icon: Layers,
     ajuda: AJUDA.abaVendas,
   },
