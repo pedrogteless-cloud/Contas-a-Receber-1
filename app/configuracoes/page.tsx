@@ -15,7 +15,11 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { AJUDA } from "@/lib/ajuda-textos";
-import { LIMITES_PADRAO, lerLimites } from "@/lib/politica-prazo";
+import {
+  LIMITES_PADRAO,
+  lerLimites,
+  mediaDaCondicao,
+} from "@/lib/politica-prazo";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { Ajuda } from "@/components/ajuda";
@@ -65,6 +69,9 @@ export default function ConfiguracoesPage() {
     LIMITES_PADRAO.tolerancia
   );
   const [semColunaTolerancia, setSemColunaTolerancia] = useState(false);
+  const [meta, setMeta] = useState<number>(LIMITES_PADRAO.meta);
+  const [metaSalva, setMetaSalva] = useState<number>(LIMITES_PADRAO.meta);
+  const [semColunaMeta, setSemColunaMeta] = useState(false);
   const [regra, setRegra] = useState<"venda" | "boleto">("venda");
   const [chatIds, setChatIds] = useState<string[]>([]);
   const [novoChat, setNovoChat] = useState("");
@@ -102,6 +109,9 @@ export default function ConfiguracoesPage() {
           setTolerancia(limites.tolerancia);
           setToleranciaSalva(limites.tolerancia);
           setSemColunaTolerancia(!("tolerancia_dias" in data));
+          setMeta(limites.meta);
+          setMetaSalva(limites.meta);
+          setSemColunaMeta(!("meta_prazo_medio" in data));
           setRegra((data.regra_limite as "venda" | "boleto") ?? "venda");
           setChatIds(
             Array.isArray(data.telegram_chat_ids) ? data.telegram_chat_ids : []
@@ -247,6 +257,7 @@ export default function ConfiguracoesPage() {
       if (!semColunaMaximo) payload.limite_maximo_dias = max;
       if (!semColunaTolerancia)
         payload.tolerancia_dias = Math.max(0, Number(tolerancia) || 0);
+      if (!semColunaMeta) payload.meta_prazo_medio = Math.max(1, Number(meta) || 0);
 
       let error;
       if (configId) {
@@ -268,6 +279,7 @@ export default function ConfiguracoesPage() {
       if (!semColunaMaximo) setMaximoSalvo(max);
       if (!semColunaTolerancia)
         setToleranciaSalva(Math.max(0, Number(tolerancia) || 0));
+      if (!semColunaMeta) setMetaSalva(Math.max(1, Number(meta) || 0));
       setAviso({ tipo: "ok", texto: "Configurações salvas." });
     } catch (err) {
       console.error(err);
@@ -333,6 +345,14 @@ export default function ConfiguracoesPage() {
             </div>
           </div>
 
+          <p className="mb-3 text-xs text-muted-foreground">
+            Com a condição padrão indo de {LIMITES_PADRAO.primeiraParcela} até{" "}
+            {limite} dias, o prazo médio concedido esperado é{" "}
+            <b>{mediaDaCondicao(LIMITES_PADRAO.primeiraParcela, limite)} dias</b>{" "}
+            — ({limite} + {LIMITES_PADRAO.primeiraParcela}) ÷ 2. É a meta
+            sugerida.
+          </p>
+
           {semColunaMaximo && (
             <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
               <p className="font-medium">
@@ -375,6 +395,18 @@ export default function ConfiguracoesPage() {
                 disabled={semColunaMaximo}
                 value={maximo}
                 onChange={(e) => setMaximo(parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="meta" className="flex items-center gap-1.5">Meta de prazo médio<Ajuda titulo="Meta de prazo médio concedido" texto={AJUDA.metaPrazoMedio} /></Label>
+              <Input
+                id="meta"
+                type="number"
+                min={1}
+                className="w-32"
+                disabled={semColunaMeta}
+                value={meta}
+                onChange={(e) => setMeta(parseInt(e.target.value) || 0)}
               />
             </div>
             <div className="space-y-1.5">
@@ -429,7 +461,8 @@ export default function ConfiguracoesPage() {
               </p>
               {(Number(limite) !== limiteSalvo ||
                 Number(maximo) !== maximoSalvo ||
-                Number(tolerancia) !== toleranciaSalva) && (
+                Number(tolerancia) !== toleranciaSalva ||
+                Number(meta) !== metaSalva) && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
                   Você mudou a política na tela ({limite}/{maximo} dias), mas o
                   salvo ainda é {limiteSalvo}/{maximoSalvo}. Clique em “Salvar

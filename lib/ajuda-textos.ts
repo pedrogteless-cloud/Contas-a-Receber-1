@@ -40,6 +40,8 @@ export const AJUDA = {
     "Teto absoluto da política (180 dias). Entre o prazo padrão e este teto, o pedido é uma exceção estratégica e gera alerta. Acima do teto, o prazo não é permitido e gera alerta crítico.",
   tolerancia:
     "Folga para a variação de calendário, não para afrouxar a regra. Uma condição \"5x mensal\" dá 150 a 153 dias corridos dependendo dos meses que atravessa \u2014 só quem entra em fevereiro fecha exatos 150 \u2014 e o vencimento em fim de semana empurra mais 1 ou 2. Sem esta folga, quase toda condição mensal padrão viraria alerta.",
+  metaPrazoMedio:
+    "A meta não é chute: ela sai da própria política. Uma condição parcelada mensalmente da primeira parcela até o prazo padrão produz uma média exata \u2014 em 30/150 as cinco parcelas são 30/60/90/120/150 e a média dá 90. A conta é (prazo padrão + primeira parcela) ÷ 2. Se a carteira estiver acima da meta com a política sendo respeitada, é sinal de que os pedidos estão concentrados nas condições mais longas.",
   politicaPrazo:
     "Três faixas, sempre pelo vencimento do ÚLTIMO boleto do pedido: até o prazo padrão = Normal; do padrão até o teto = Exceção estratégica (alerta); acima do teto = Não permitido (alerta crítico).",
   excecoesEstrategicas:

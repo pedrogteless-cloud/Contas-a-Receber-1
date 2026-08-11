@@ -32,12 +32,34 @@ export interface LimitesPrazo {
    * 150 reprovaria quase toda condição mensal padrão.
    */
   tolerancia: number;
+  /** Dias até a PRIMEIRA parcela na condição padrão. Normalmente 30. */
+  primeiraParcela: number;
+  /**
+   * Meta de prazo médio concedido — o número que a operação persegue.
+   *
+   * Não se escolhe no chute: uma condição parcelada mensalmente da primeira
+   * parcela até o prazo padrão produz uma média exata. Para 30/150, as cinco
+   * parcelas são 30/60/90/120/150 e a média é 90. Em geral:
+   *
+   *     meta = (prazo padrão + primeira parcela) / 2
+   *
+   * Ou seja, a meta é consequência da política — não um alvo independente.
+   */
+  meta: number;
+}
+
+/** A média que uma condição "primeira/última" mensal produz. */
+export function mediaDaCondicao(primeira: number, ultima: number): number {
+  if (primeira <= 0 || ultima < primeira) return ultima;
+  return Math.round((ultima + primeira) / 2);
 }
 
 export const LIMITES_PADRAO: LimitesPrazo = {
   normal: 150,
   maximo: 180,
   tolerancia: 5,
+  primeiraParcela: 30,
+  meta: 90, // (150 + 30) / 2
 };
 
 /**
@@ -50,6 +72,8 @@ export function lerLimites(
         limite_prazo_dias?: number | null;
         limite_maximo_dias?: number | null;
         tolerancia_dias?: number | null;
+        meta_prazo_medio?: number | null;
+        primeira_parcela_dias?: number | null;
       }
     | null
     | undefined
@@ -57,12 +81,21 @@ export function lerLimites(
   const normal = config?.limite_prazo_dias ?? LIMITES_PADRAO.normal;
   const maximo = config?.limite_maximo_dias ?? LIMITES_PADRAO.maximo;
   const tolerancia = config?.tolerancia_dias ?? LIMITES_PADRAO.tolerancia;
+  const primeiraParcela =
+    config?.primeira_parcela_dias ?? LIMITES_PADRAO.primeiraParcela;
+  // Sem meta gravada, ela sai da própria política — assim os dois números
+  // nunca ficam contando histórias diferentes.
+  const meta =
+    config?.meta_prazo_medio ?? mediaDaCondicao(primeiraParcela, normal);
+
   // Um máximo abaixo do normal deixaria a faixa de exceção vazia e faria todo
   // pedido longo cair direto em "não permitido". Preferimos ignorar o valor.
   return {
     normal,
     maximo: Math.max(maximo, normal),
     tolerancia: Math.max(0, tolerancia),
+    primeiraParcela,
+    meta,
   };
 }
 

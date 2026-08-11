@@ -66,8 +66,12 @@ function montarResumo(
       } · ${doDia.length} boleto${doDia.length > 1 ? "s" : ""} · ${moedaCurta(
         valorTotal(doDia)
       )}`,
-      `⏳ Prazo médio dos boletos emitidos: ${
-        prazoDoDia != null ? `${diasCurto(prazoDoDia)} dias` : "—"
+      `⏳ Prazo médio concedido hoje: ${
+        prazoDoDia != null
+          ? `${diasCurto(prazoDoDia)} dias ${
+              prazoDoDia <= limites.meta ? "✅" : "🔺"
+            } (meta ${limites.meta})`
+          : "—"
       }`,
       ""
     );
@@ -114,7 +118,7 @@ function montarResumo(
     "",
     `📦 Carteira ${moedaCurta(valorTotal(boletos))} · prazo médio concedido ${
       pmr != null ? `${diasCurto(pmr)}d` : "—"
-    } · ${proximos7.length} vence(m) em 7d`
+    } (meta ${limites.meta}d) · ${proximos7.length} vence(m) em 7d`
   );
 
   const vencidos = boletos.filter((b) => {

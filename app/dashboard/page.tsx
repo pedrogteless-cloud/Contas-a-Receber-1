@@ -243,12 +243,22 @@ export default function DashboardPage() {
             label="Prazo médio concedido"
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
             hint={
-              pmSimples != null
-                ? `Ponderado pelo valor · média simples: ${pmSimples} dias`
-                : "Ponderado pelo valor"
+              pmGeral != null
+                ? `Meta ${limites.meta}d · ${
+                    pmGeral <= limites.meta
+                      ? `${Math.round((limites.meta - pmGeral) * 10) / 10}d abaixo`
+                      : `${Math.round((pmGeral - limites.meta) * 10) / 10}d acima`
+                  }${pmSimples != null ? ` · simples ${pmSimples}d` : ""}`
+                : `Meta ${limites.meta} dias`
             }
             icon={Gauge}
-            tom="brand"
+            tom={
+              pmGeral == null
+                ? "brand"
+                : pmGeral <= limites.meta
+                  ? "success"
+                  : "warning"
+            }
             ajuda={AJUDA.prazoMedio}
           />
           <StatCard
