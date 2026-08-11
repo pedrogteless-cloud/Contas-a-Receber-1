@@ -99,9 +99,14 @@ export function AcordoCliente({
     }
   }
 
+  // Mostra o que o sistema entendeu ENQUANTO se digita: "30/150" vira
+  // 30/60/90/120/150, e ninguém precisa adivinhar se foi lido como faixa.
+  const lido = interpretarCondicao(condicao);
+
   if (editando) {
     return (
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center justify-end gap-1">
         <Input
           autoFocus
           className="h-8 w-28 text-right"
@@ -143,6 +148,12 @@ export function AcordoCliente({
         >
           <X className="h-4 w-4" />
         </Button>
+        </div>
+        {lido.prazo != null && (
+          <p className="text-[11px] text-muted-foreground">
+            {lido.condicao} · {lido.parcelas}x · último {lido.prazo}d
+          </p>
+        )}
       </div>
     );
   }

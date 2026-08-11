@@ -35,23 +35,52 @@ export interface Acordo {
 }
 
 /**
- * Lê uma condição de pagamento escrita à mão: "30/150", "30 60 90", "150".
+ * Lê uma condição de pagamento escrita à mão.
  *
- * O prazo que a política cobra é o do ÚLTIMO vencimento, então guardamos o
- * maior número — mas preservamos o texto inteiro, porque é assim que a
- * condição foi combinada com o cliente.
+ * No comércio, "30/150" não são duas parcelas: é a FAIXA — da primeira aos 30
+ * dias até a última aos 150, de 30 em 30. Ou seja, 30/60/90/120/150, cinco
+ * parcelas. Então dois números em que o segundo é múltiplo do primeiro são
+ * expandidos; qualquer outra coisa fica como foi escrita.
+ *
+ * Exemplos:
+ *   "30/150"            -> 30/60/90/120/150   (5x)
+ *   "28/168"            -> 28/56/.../168      (6x)
+ *   "30/45"             -> 30/45              (45 não é múltiplo de 30)
+ *   "30/60/90"          -> 30/60/90           (lista completa, respeitada)
+ *   "150"               -> 150                (parcela única)
  */
 export function interpretarCondicao(texto: string): {
   condicao: string;
   prazo: number | null;
+  parcelas: number;
 } {
   const numeros = (texto.match(/\d+/g) ?? [])
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0);
-  if (numeros.length === 0) return { condicao: "", prazo: null };
+
+  if (numeros.length === 0) return { condicao: "", prazo: null, parcelas: 0 };
+
+  // A notação de faixa: "primeira/última", com o passo igual à primeira.
+  if (numeros.length === 2) {
+    const [passo, ultima] = numeros;
+    const cabe = ultima > passo && ultima % passo === 0;
+    const qtd = cabe ? ultima / passo : 0;
+    // Até 24 parcelas; acima disso é mais provável ser engano de digitação.
+    if (cabe && qtd >= 2 && qtd <= 24) {
+      const lista = Array.from({ length: qtd }, (_, i) => passo * (i + 1));
+      return {
+        condicao: lista.join("/"),
+        prazo: ultima,
+        parcelas: qtd,
+      };
+    }
+  }
+
+  const ordenados = [...numeros].sort((a, b) => a - b);
   return {
-    condicao: numeros.join("/"),
-    prazo: Math.max(...numeros),
+    condicao: ordenados.join("/"),
+    prazo: ordenados[ordenados.length - 1],
+    parcelas: ordenados.length,
   };
 }
 
