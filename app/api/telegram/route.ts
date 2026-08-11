@@ -10,6 +10,11 @@ import {
   type Pedido,
 } from "@/lib/politica-prazo";
 import { prazoMedioPonderado } from "@/lib/analytics";
+import {
+  lerNotificacoes,
+  notificacaoAtiva,
+  type MapaNotificacoes,
+} from "@/lib/notificacoes";
 import { linhaPedido, moedaCurta } from "@/lib/telegram-formato";
 import {
   avaliarPedido,
@@ -87,7 +92,8 @@ function montarAvisos(
   limites: LimitesPrazo,
   acordos: Map<string, Acordo>,
   /** Prazo médio concedido de cada cliente, de TODA a carteira dele. */
-  prazoPorCliente: Map<string, number>
+  prazoPorCliente: Map<string, number>,
+  avisos: MapaNotificacoes
 ): { lotes: Lote[]; silenciados: string[] } {
   const naoPermitidos: Pedido[] = [];
   const excecoes: Pedido[] = [];
@@ -122,24 +128,31 @@ function montarAvisos(
     };
   };
 
+  // Um tipo desligado na aba Notificações simplesmente não gera lote — mas os
+  // boletos seguem marcados nas telas, e voltam a avisar se for religado.
   const lotes = [
-    ...montarLotes(
+    ...(notificacaoAtiva(avisos, "politica_critico")
+      ? montarLotes(
       naoPermitidos,
       (qtd, valor) =>
         `🚨 ${qtd} pedido${qtd > 1 ? "s" : ""} ACIMA DE ${
           limites.maximo
         } DIAS · ${moedaCurta(valor)}\nPrazo não permitido pela política.`,
       posicao
-    ),
-    ...montarLotes(
+    )
+      : []),
+    ...(notificacaoAtiva(avisos, "acordo_descumprido")
+      ? montarLotes(
       foraDoAcordo,
       (qtd, valor) =>
         `🤝 ${qtd} pedido${qtd > 1 ? "s" : ""} FORA DO ACORDO · ${moedaCurta(
           valor
         )}\nEstes clientes já tinham prazo combinado — e o pedido passou dele.`,
       posicao
-    ),
-    ...montarLotes(
+    )
+      : []),
+    ...(notificacaoAtiva(avisos, "politica_excecao")
+      ? montarLotes(
       excecoes,
       (qtd, valor) =>
         `⚠️ ${qtd} exceç${qtd > 1 ? "ões" : "ão"} estratégica${
@@ -148,7 +161,8 @@ function montarAvisos(
           limites.normal + 1
         } e ${limites.maximo} dias.`,
       posicao
-    ),
+    )
+      : []),
   ];
 
   return { lotes, silenciados };
@@ -278,7 +292,8 @@ export async function POST(req: Request) {
     pedidos,
     limites,
     acordos,
-    prazoPorCliente
+    prazoPorCliente,
+    lerNotificacoes(config)
   );
   let enviados = 0;
 

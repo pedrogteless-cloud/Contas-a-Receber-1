@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { moedaCurta } from "@/lib/telegram-formato";
+import { lerNotificacoes, notificacaoAtiva } from "@/lib/notificacoes";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
 
 export const runtime = "nodejs";
@@ -55,6 +56,10 @@ export async function POST(req: Request) {
     .select("*")
     .limit(1)
     .maybeSingle();
+
+  if (!notificacaoAtiva(lerNotificacoes(config), "acordo_reducao")) {
+    return NextResponse.json({ ok: false, motivo: "aviso_desligado" });
+  }
 
   const chatIds: string[] = Array.isArray(config?.telegram_chat_ids)
     ? (config!.telegram_chat_ids as string[]).filter(Boolean)

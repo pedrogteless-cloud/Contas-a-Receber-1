@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   FileUp,
   LayoutDashboard,
   History,
@@ -53,6 +54,12 @@ const LINKS: LinkNav[] = [
     ajuda: AJUDA.abaHistorico,
   },
   {
+    href: "/notificacoes",
+    label: "Notificações",
+    icon: Bell,
+    ajuda: AJUDA.abaNotificacoes,
+  },
+  {
     href: "/configuracoes",
     label: "Configurações",
     icon: Settings,
@@ -91,7 +98,7 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-3">
+        <Link href="/" className="flex shrink-0 items-center gap-3">
           <Logo />
           <span className="hidden flex-col leading-tight sm:flex">
             <span className="text-sm font-semibold">Contas a Receber 1</span>
@@ -101,9 +108,11 @@ export function Nav() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <Relogio />
-          <nav className="flex items-center gap-0.5 rounded-full border border-border/70 bg-card/60 p-1 shadow-sm">
+          {/* min-w-0 é o que permite o overflow-x funcionar: sem ele o nav
+              cresce com o conteúdo e empurra a barra inteira. */}
+          <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full border border-border/70 bg-card/60 p-1 shadow-sm scroll-thin">
             {links.map(({ href, label, icon: Icon, ajuda }) => {
               const ativo =
                 href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -119,7 +128,7 @@ export function Nav() {
                     )}
                   >
                     <Icon className="h-4 w-4" />
-                    <span className="hidden lg:inline">{label}</span>
+                    <span className="hidden xl:inline">{label}</span>
                   </Link>
                 </ComAjuda>
               );

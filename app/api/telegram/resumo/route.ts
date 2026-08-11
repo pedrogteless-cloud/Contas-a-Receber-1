@@ -13,6 +13,12 @@ import {
 } from "@/lib/politica-prazo";
 import { dataCurtaISO, hojeBrasilia } from "@/lib/tempo";
 import { diasCurto, moedaCurta } from "@/lib/telegram-formato";
+import {
+  LIMIAR_CONCENTRACAO,
+  lerNotificacoes,
+  notificacaoAtiva,
+  type MapaNotificacoes,
+} from "@/lib/notificacoes";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
 
 export const runtime = "nodejs";
@@ -44,7 +50,8 @@ function autorizado(req: Request): boolean {
 function montarResumo(
   boletos: Boleto[],
   limites: LimitesPrazo,
-  hoje: string
+  hoje: string,
+  avisos: MapaNotificacoes
 ): string {
   const doDia = boletos.filter((b) => b.data_importacao === hoje);
   const pedidosDoDia = agruparPedidos(doDia);
@@ -53,7 +60,11 @@ function montarResumo(
   const linhas: string[] = [`📊 Fechamento do dia · ${dataCurtaISO(hoje)}`, ""];
 
   if (doDia.length === 0) {
-    linhas.push("Nenhum boleto emitido hoje.");
+    linhas.push(
+      notificacaoAtiva(avisos, "dia_sem_importacao")
+        ? "😴 Nenhum boleto foi importado hoje.\nSe houve emissão, o relatório do banco ainda não subiu no sistema."
+        : "Nenhum boleto emitido hoje."
+    );
   } else {
     const prazoDoDia = prazoMedioPonderado(doDia);
     const desvio = desvioDaMeta(prazoDoDia, limites.meta);
@@ -66,9 +77,23 @@ function montarResumo(
       )}`,
       `${desvio?.emoji ?? "⏳"} Prazo médio concedido hoje: ${
         prazoDoDia != null ? `${diasCurto(prazoDoDia)}d` : "—"
-      }${desvio ? ` · ${desvio.texto} (${limites.meta}d)` : ""}`,
-      ""
+      }${desvio ? ` · ${desvio.texto} (${limites.meta}d)` : ""}`
     );
+
+    if (
+      desvio &&
+      !desvio.acimaDaMeta &&
+      notificacaoAtiva(avisos, "meta_do_dia")
+    ) {
+      linhas.push(
+        "",
+        "🎯 META DO DIA BATIDA",
+        `Prazo médio concedido hoje: ${diasCurto(prazoDoDia!)}d — ${
+          desvio.texto
+        } de ${limites.meta}d.`
+      );
+    }
+    linhas.push("");
 
     if (ind.acimaDoNormal.quantidade === 0) {
       linhas.push(`✅ Nenhum pedido acima de ${limites.normal} dias.`);
@@ -118,7 +143,42 @@ function montarResumo(
     }${desvioCarteira ? ` · ${desvioCarteira.texto}` : ""}`
   );
 
+  if (notificacaoAtiva(avisos, "concentracao_cliente")) {
+    const concentrado = maiorConcentracao(boletos);
+    if (concentrado && concentrado.fatia >= LIMIAR_CONCENTRACAO) {
+      linhas.push(
+        "",
+        "📈 Concentração de carteira",
+        `${concentrado.nome} representa ${Math.round(
+          concentrado.fatia * 100
+        )}% do total a receber (${moedaCurta(concentrado.valor)}).`
+      );
+    }
+  }
+
   return linhas.join("\n");
+}
+
+/** O cliente com a maior fatia da carteira. */
+function maiorConcentracao(
+  boletos: Boleto[]
+): { nome: string; valor: number; fatia: number } | null {
+  const total = valorTotal(boletos);
+  if (total <= 0) return null;
+
+  const porCliente = new Map<string, number>();
+  for (const b of boletos) {
+    const nome = b.sacado || "—";
+    porCliente.set(nome, (porCliente.get(nome) ?? 0) + (b.valor ?? 0));
+  }
+
+  let melhor: { nome: string; valor: number } | null = null;
+  for (const [nome, valor] of porCliente) {
+    if (!melhor || valor > melhor.valor) melhor = { nome, valor };
+  }
+  return melhor
+    ? { nome: abreviarNome(melhor.nome), valor: melhor.valor, fatia: melhor.valor / total }
+    : null;
 }
 
 /** Prazo médio concedido de cada cliente que emitiu boleto hoje. */
@@ -183,10 +243,16 @@ async function executar(req: Request) {
     return NextResponse.json({ ok: false, motivo: "sem_destinatarios" });
   }
 
+  const avisos = lerNotificacoes(config);
+  if (!notificacaoAtiva(avisos, "fechamento_dia")) {
+    return NextResponse.json({ ok: false, motivo: "aviso_desligado" });
+  }
+
   const texto = montarResumo(
     (boletosData ?? []) as Boleto[],
     lerLimites(config),
-    hojeBrasilia()
+    hojeBrasilia(),
+    avisos
   );
 
   let enviados = 0;
