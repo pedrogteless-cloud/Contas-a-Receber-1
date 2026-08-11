@@ -26,6 +26,7 @@ import {
   type LinhaImportada,
 } from "@/lib/boletos";
 import { AJUDA } from "@/lib/ajuda-textos";
+import { lerLimites } from "@/lib/politica-prazo";
 import { hojeISO } from "@/lib/tempo";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -83,11 +84,11 @@ export default function ImportacaoPage() {
   useEffect(() => {
     supabase
       .from("configuracoes")
-      .select("limite_prazo_dias, regra_limite")
+      .select("*")
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.limite_prazo_dias != null) setLimite(data.limite_prazo_dias);
+        setLimite(lerLimites(data).normal);
         if (data?.regra_limite) setRegra(data.regra_limite as Regra);
       });
   }, []);

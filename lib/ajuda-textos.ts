@@ -35,7 +35,15 @@ export const AJUDA = {
   prazoRecebimento:
     "Dias entre a entrada e o vencimento da ÚLTIMA parcela da venda — o tempo total até receber tudo daquela compra. É o que representa a decisão de crédito.",
   limite:
-    "Limite de prazo definido em Configurações (padrão 60 dias). Boletos com prazo acima disso são marcados em vermelho e geram alerta.",
+    "Prazo padrão máximo da política (150 dias). Pedidos cujo ÚLTIMO boleto vence dentro desse prazo são Normais. Acima dele, o pedido vira exceção estratégica ou passa a não ser permitido.",
+  limiteMaximo:
+    "Teto absoluto da política (180 dias). Entre o prazo padrão e este teto, o pedido é uma exceção estratégica e gera alerta. Acima do teto, o prazo não é permitido e gera alerta crítico.",
+  politicaPrazo:
+    "Três faixas, sempre pelo vencimento do ÚLTIMO boleto do pedido: até o prazo padrão = Normal; do padrão até o teto = Exceção estratégica (alerta); acima do teto = Não permitido (alerta crítico).",
+  excecoesEstrategicas:
+    "Pedidos com prazo entre o padrão e o teto da política. Não são proibidos, mas precisam de decisão consciente — por isso aparecem no alerta com cliente, pedido, valor, condição de pagamento e último vencimento.",
+  naoPermitidos:
+    "Pedidos com prazo acima do teto da política. Fogem da regra e geram alerta crítico, em mensagem separada para não se perderem no meio das exceções.",
   acimaLimite:
     "Quantidade e percentual de boletos cujo prazo passou do limite. O percentual é sobre o total de boletos filtrados.",
   valorCarteira:

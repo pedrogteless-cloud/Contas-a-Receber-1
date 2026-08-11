@@ -28,6 +28,11 @@ import {
   valorTotal,
 } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
+import {
+  LIMITES_PADRAO,
+  lerLimites,
+  type LimitesPrazo,
+} from "@/lib/politica-prazo";
 import { CHART, corEmpresa } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
@@ -75,7 +80,8 @@ export default function ClientesPage() {
   const mounted = useMounted();
   const { isDark } = useTheme();
   const [boletos, setBoletos] = useState<Boleto[]>([]);
-  const [limite, setLimite] = useState(60);
+  const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
+  const limite = limites.normal;
   const [carregando, setCarregando] = useState(true);
 
   const [busca, setBusca] = useState("");
@@ -87,12 +93,12 @@ export default function ClientesPage() {
       supabase.from("boletos").select("*"),
       supabase
         .from("configuracoes")
-        .select("limite_prazo_dias")
+        .select("*")
         .limit(1)
         .maybeSingle(),
     ]).then(([b, c]) => {
       setBoletos((b.data ?? []) as Boleto[]);
-      if (c.data?.limite_prazo_dias != null) setLimite(c.data.limite_prazo_dias);
+      setLimites(lerLimites(c.data));
       setCarregando(false);
     });
   }, []);

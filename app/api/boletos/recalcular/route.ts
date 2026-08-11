@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { lerLimites } from "@/lib/politica-prazo";
 import { ehAdmin } from "@/lib/auth";
 import { calcularDadosVenda, type Boleto } from "@/lib/boletos";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
@@ -33,7 +34,7 @@ export async function POST() {
     supabase.from("boletos").select("*"),
     supabase
       .from("configuracoes")
-      .select("limite_prazo_dias, regra_limite")
+      .select("*")
       .limit(1)
       .maybeSingle(),
   ]);
@@ -48,7 +49,8 @@ export async function POST() {
     return NextResponse.json({ ok: true, atualizados: 0, acima: 0 });
   }
 
-  const limite = config?.limite_prazo_dias ?? 60;
+  const limites = lerLimites(config);
+  const limite = limites.normal;
   const regra = (config?.regra_limite as "venda" | "boleto") ?? "venda";
 
   // Recalcula documento/parcela/prazo de recebimento agrupando por venda.

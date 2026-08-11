@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { type Boleto } from "@/lib/boletos";
 import {
-  agruparParaTelegram,
-  linhaVenda,
-  moedaCurta,
-  type VendaResumida,
-} from "@/lib/telegram-formato";
+  agruparPedidos,
+  classificarPrazo,
+  lerLimites,
+  type LimitesPrazo,
+  type Pedido,
+} from "@/lib/politica-prazo";
+import { linhaPedido, moedaCurta } from "@/lib/telegram-formato";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,44 +31,75 @@ interface Lote {
 }
 
 /**
- * Junta TODOS os prazos de recebimento acima do limite num aviso só — ou em
- * poucos, quando a lista é longa demais para uma mensagem — com os títulos de
- * cada um listados logo abaixo.
- *
- * Antes saía uma mensagem separada por prazo de recebimento. Como a importação
- * acontece no fim do expediente, isso enchia o grupo de blocos que ninguém
- * conseguia ler de relance.
+ * Monta os avisos de um grupo de pedidos, quebrando em várias mensagens quando
+ * a lista não cabe em uma só. Cada lote carrega os ids que ele cobre, para que
+ * só o que realmente chegou ao grupo seja marcado como avisado.
  */
-function montarLotes(vendas: VendaResumida[], limite: number): Lote[] {
+function montarLotes(
+  pedidos: Pedido[],
+  cabecalho: (qtd: number, valor: number) => string
+): Lote[] {
   const lotes: Lote[] = [];
-  let bloco: VendaResumida[] = [];
+  let bloco: Pedido[] = [];
   let tamanho = 0;
 
   function fechar() {
     if (bloco.length === 0) return;
-    const total = bloco.reduce((s, v) => s + v.valorTotal, 0);
-    const titulo = `🔴 ${bloco.length} prazo${
-      bloco.length > 1 ? "s" : ""
-    } de recebimento acima de ${limite} dias · ${moedaCurta(total)}`;
+    const total = bloco.reduce((s, p) => s + p.valorTotal, 0);
     lotes.push({
-      // Linha em branco entre os blocos: sem ela, os títulos de um prazo
-      // colam no cabeçalho do seguinte.
-      texto: [titulo, "", bloco.map(linhaVenda).join("\n\n")].join("\n"),
-      ids: bloco.flatMap((v) => v.ids),
+      // Linha em branco entre os blocos: sem ela, um pedido cola no seguinte.
+      texto: [
+        cabecalho(bloco.length, total),
+        "",
+        bloco.map(linhaPedido).join("\n\n"),
+      ].join("\n"),
+      ids: bloco.flatMap((p) => p.ids),
     });
     bloco = [];
     tamanho = 0;
   }
 
-  for (const v of vendas) {
-    const linha = linhaVenda(v);
+  for (const p of pedidos) {
+    const linha = linhaPedido(p);
     if (bloco.length > 0 && tamanho + linha.length > MAX_CARACTERES) fechar();
-    bloco.push(v);
-    tamanho += linha.length + 1;
+    bloco.push(p);
+    tamanho += linha.length + 2;
   }
   fechar();
 
   return lotes;
+}
+
+/**
+ * Os dois avisos da política, em mensagens separadas e nesta ordem: o crítico
+ * primeiro, para não ficar enterrado no meio das exceções.
+ */
+function montarAvisos(pedidos: Pedido[], limites: LimitesPrazo): Lote[] {
+  const naoPermitidos = pedidos.filter(
+    (p) => classificarPrazo(p.prazo, limites) === "nao_permitido"
+  );
+  const excecoes = pedidos.filter(
+    (p) => classificarPrazo(p.prazo, limites) === "excecao"
+  );
+
+  return [
+    ...montarLotes(
+      naoPermitidos,
+      (qtd, valor) =>
+        `🚨 ${qtd} pedido${qtd > 1 ? "s" : ""} ACIMA DE ${
+          limites.maximo
+        } DIAS · ${moedaCurta(valor)}\nPrazo não permitido pela política.`
+    ),
+    ...montarLotes(
+      excecoes,
+      (qtd, valor) =>
+        `⚠️ ${qtd} exceç${qtd > 1 ? "ões" : "ão"} estratégica${
+          qtd > 1 ? "s" : ""
+        } · ${moedaCurta(valor)}\nPrazo de recebimento entre ${
+          limites.normal + 1
+        } e ${limites.maximo} dias.`
+    ),
+  ];
 }
 
 async function enviarTelegram(
@@ -97,8 +130,8 @@ async function enviarTelegram(
 }
 
 /**
- * Dispara os alertas das VENDAS que excederam o limite e ainda não foram
- * avisadas. Marca `alerta_enviado = true` apenas quando todos os envios do
+ * Dispara os alertas dos PEDIDOS fora da política que ainda não foram
+ * avisados. Marca `alerta_enviado = true` apenas quando todos os envios do
  * lote deram certo. Nunca reenvia.
  *
  * Body opcional: { ids?: string[] } para restringir a boletos específicos.
@@ -146,13 +179,15 @@ export async function POST(req: Request) {
     return NextResponse.json(resultado);
   }
 
+  // `select("*")` para não quebrar caso a coluna do limite máximo ainda não
+  // exista no banco — lerLimites cai no padrão da política.
   const { data: config } = await supabase
     .from("configuracoes")
-    .select("limite_prazo_dias, telegram_chat_ids")
+    .select("*")
     .limit(1)
     .maybeSingle();
 
-  const limite: number = config?.limite_prazo_dias ?? 60;
+  const limites = lerLimites(config);
   const chatIds: string[] = Array.isArray(config?.telegram_chat_ids)
     ? (config!.telegram_chat_ids as string[]).filter(Boolean)
     : [];
@@ -166,10 +201,10 @@ export async function POST(req: Request) {
     return NextResponse.json(resultado);
   }
 
-  const vendas = agruparParaTelegram(pendentesBoletos);
+  const pedidos = agruparPedidos(pendentesBoletos);
   let enviados = 0;
 
-  for (const lote of montarLotes(vendas, limite)) {
+  for (const lote of montarAvisos(pedidos, limites)) {
     let todosOk = true;
     for (const chatId of chatIds) {
       const ok = await enviarTelegram(token, chatId, lote.texto);

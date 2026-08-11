@@ -24,6 +24,8 @@ import {
   Wallet,
   Sofa,
   BedDouble,
+  ShieldAlert,
+  Ban,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -43,6 +45,13 @@ import {
   valorTotal,
 } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
+import {
+  LIMITES_PADRAO,
+  agruparPedidos,
+  indicadoresPolitica,
+  lerLimites,
+  type LimitesPrazo,
+} from "@/lib/politica-prazo";
 import { dataPorExtenso, diasAte, hojeISO } from "@/lib/tempo";
 import { CHART, corEmpresa, formatarCompacto } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
@@ -87,7 +96,8 @@ export default function DashboardPage() {
   const mounted = useMounted();
   const { isDark } = useTheme();
   const [boletos, setBoletos] = useState<Boleto[]>([]);
-  const [limite, setLimite] = useState<number>(60);
+  const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
+  const limite = limites.normal;
   const [carregando, setCarregando] = useState(true);
 
   const [empresa, setEmpresa] = useState<string>("Todas");
@@ -99,12 +109,12 @@ export default function DashboardPage() {
       supabase.from("boletos").select("*"),
       supabase
         .from("configuracoes")
-        .select("limite_prazo_dias")
+        .select("*")
         .limit(1)
         .maybeSingle(),
     ]).then(([b, c]) => {
       setBoletos((b.data ?? []) as Boleto[]);
-      if (c.data?.limite_prazo_dias != null) setLimite(c.data.limite_prazo_dias);
+      setLimites(lerLimites(c.data));
       setCarregando(false);
     });
   }, []);
@@ -159,6 +169,13 @@ export default function DashboardPage() {
   );
   const top = useMemo(() => topClientes(dados, 8), [dados]);
   const insights = useMemo(() => gerarInsights(dados, limite), [dados, limite]);
+
+  // Política de prazo: avaliada por PEDIDO, pelo vencimento do último boleto.
+  const pedidos = useMemo(() => agruparPedidos(dados), [dados]);
+  const politica = useMemo(
+    () => indicadoresPolitica(pedidos, limites),
+    [pedidos, limites]
+  );
 
   const eixo = isDark ? "#94a3b8" : "#64748b";
   const grade = isDark ? "#1e293b" : "#eef2f7";
@@ -279,6 +296,53 @@ export default function DashboardPage() {
             ajuda={AJUDA.vencidos}
           />
         </div>
+      )}
+
+      {!carregando && !vazio && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              Política de prazo
+              <Ajuda titulo="Política de prazo" texto={AJUDA.politicaPrazo} />
+            </CardTitle>
+            <CardDescription>
+              Por pedido, pelo vencimento do último boleto · normal até{" "}
+              {limites.normal} dias, teto de {limites.maximo}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-3">
+            <StatCard
+              label={`Último venc. acima de ${limites.normal} dias`}
+              value={String(politica.acimaDoNormal.quantidade)}
+              hint={`${formatarMoeda(politica.acimaDoNormal.valor)} · ${
+                pedidos.length
+              } pedido(s) no recorte`}
+              icon={AlertTriangle}
+              tom={politica.acimaDoNormal.quantidade > 0 ? "warning" : "success"}
+              ajuda={AJUDA.acimaLimite}
+            />
+            <StatCard
+              label={`Exceções estratégicas (${limites.normal + 1}–${
+                limites.maximo
+              }d)`}
+              value={String(politica.excecoes.quantidade)}
+              hint={formatarMoeda(politica.excecoes.valor)}
+              icon={ShieldAlert}
+              tom={politica.excecoes.quantidade > 0 ? "warning" : "success"}
+              ajuda={AJUDA.excecoesEstrategicas}
+            />
+            <StatCard
+              label={`Acima de ${limites.maximo} dias`}
+              value={String(politica.naoPermitidos.quantidade)}
+              hint={`${formatarMoeda(politica.naoPermitidos.valor)}${
+                politica.naoPermitidos.quantidade > 0 ? " · não permitido" : ""
+              }`}
+              icon={Ban}
+              tom={politica.naoPermitidos.quantidade > 0 ? "danger" : "success"}
+              ajuda={AJUDA.naoPermitidos}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {vazio && (

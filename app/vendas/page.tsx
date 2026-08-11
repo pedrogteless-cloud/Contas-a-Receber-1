@@ -12,6 +12,13 @@ import {
 } from "@/lib/boletos";
 import { agruparVendas } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
+import {
+  LIMITES_PADRAO,
+  STATUS,
+  classificarPrazo,
+  lerLimites,
+  type LimitesPrazo,
+} from "@/lib/politica-prazo";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
@@ -54,7 +61,8 @@ const OPCOES_EMPRESA = [
 
 export default function VendasPage() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
-  const [limite, setLimite] = useState(60);
+  const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
+  const limite = limites.normal;
   const [carregando, setCarregando] = useState(true);
 
   const [busca, setBusca] = useState("");
@@ -67,12 +75,12 @@ export default function VendasPage() {
       supabase.from("boletos").select("*"),
       supabase
         .from("configuracoes")
-        .select("limite_prazo_dias")
+        .select("*")
         .limit(1)
         .maybeSingle(),
     ]).then(([b, c]) => {
       setBoletos((b.data ?? []) as Boleto[]);
-      if (c.data?.limite_prazo_dias != null) setLimite(c.data.limite_prazo_dias);
+      setLimites(lerLimites(c.data));
       setCarregando(false);
     });
   }, []);
@@ -215,6 +223,7 @@ export default function VendasPage() {
                     <TableHead>1º venc.</TableHead>
                     <TableHead>Último venc.</TableHead>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo receb.<Ajuda titulo="Prazo de recebimento" texto={AJUDA.prazoRecebimento} /></span></TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Status<Ajuda titulo="Política de prazo" texto={AJUDA.politicaPrazo} /></span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -287,6 +296,25 @@ export default function VendasPage() {
                               "—"
                             )}
                           </TableCell>
+                          <TableCell className="text-right">
+                            {(() => {
+                              const st = classificarPrazo(c.prazoUltima, limites);
+                              if (!st) return "—";
+                              return (
+                                <Badge
+                                  variant={
+                                    st === "nao_permitido"
+                                      ? "destructive"
+                                      : st === "excecao"
+                                        ? "warning"
+                                        : "success"
+                                  }
+                                >
+                                  {STATUS[st].emoji} {STATUS[st].curto}
+                                </Badge>
+                              );
+                            })()}
+                          </TableCell>
                         </TableRow>
 
                         {expandida &&
@@ -332,6 +360,8 @@ export default function VendasPage() {
                                     {b.prazo_dias ?? "—"}d
                                   </span>
                                 </TableCell>
+                                {/* A política é do pedido, não da parcela. */}
+                                <TableCell></TableCell>
                               </TableRow>
                             );
                           })}

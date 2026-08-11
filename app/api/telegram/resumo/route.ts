@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { prazoMedioPonderado, valorTotal } from "@/lib/analytics";
-import { type Boleto } from "@/lib/boletos";
+import { abreviarNome, type Boleto } from "@/lib/boletos";
+import {
+  agruparPedidos,
+  indicadoresPolitica,
+  lerLimites,
+  type LimitesPrazo,
+} from "@/lib/politica-prazo";
 import { dataCurtaISO, diasAte, hojeBrasilia } from "@/lib/tempo";
 import {
-  agruparParaTelegram,
   diasCurto,
+  empresaCurta,
   moedaCurta,
+  vencimentoCurto,
 } from "@/lib/telegram-formato";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
 
@@ -33,51 +40,65 @@ function autorizado(req: Request): boolean {
 }
 
 /**
- * O resumo é sobre O DIA: quanto foi importado, que prazo foi concedido hoje e
- * quais vendas puxaram esse prazo para cima. A carteira inteira entra só como
- * uma linha de contexto no rodapé.
+ * O fechamento é sobre O DIA: o que foi emitido, que prazo foi concedido e
+ * quais pedidos saíram da política. A carteira inteira entra só como uma linha
+ * de contexto no rodapé.
  */
-function montarResumo(boletos: Boleto[], limite: number, hoje: string): string {
+function montarResumo(
+  boletos: Boleto[],
+  limites: LimitesPrazo,
+  hoje: string
+): string {
   const doDia = boletos.filter((b) => b.data_importacao === hoje);
-  const vendasDoDia = agruparParaTelegram(doDia);
+  const pedidosDoDia = agruparPedidos(doDia);
+  const ind = indicadoresPolitica(pedidosDoDia, limites);
 
   const linhas: string[] = [`📊 Fechamento do dia · ${dataCurtaISO(hoje)}`, ""];
 
   if (doDia.length === 0) {
-    linhas.push("Nenhuma importação hoje.");
+    linhas.push("Nenhum boleto emitido hoje.");
   } else {
     const prazoDoDia = prazoMedioPonderado(doDia);
-    const acima = vendasDoDia.filter(
-      (v) => v.prazo != null && v.prazo > limite
-    );
 
     linhas.push(
-      `📥 ${vendasDoDia.length} venda${
-        vendasDoDia.length > 1 ? "s" : ""
+      `📥 ${pedidosDoDia.length} pedido${
+        pedidosDoDia.length > 1 ? "s" : ""
       } · ${doDia.length} boleto${doDia.length > 1 ? "s" : ""} · ${moedaCurta(
         valorTotal(doDia)
       )}`,
-      `⏳ Prazo médio dado hoje: ${
+      `⏳ Prazo médio dos boletos emitidos: ${
         prazoDoDia != null ? `${diasCurto(prazoDoDia)} dias` : "—"
       }`,
-      acima.length > 0
-        ? `🔴 ${acima.length} prazo${
-            acima.length > 1 ? "s" : ""
-          } de recebimento acima de ${limite}d · ${moedaCurta(
-            acima.reduce((s, v) => s + v.valorTotal, 0)
-          )}`
-        : `🟢 Nenhum prazo de recebimento acima de ${limite}d`
+      ""
     );
 
-    // agruparParaTelegram já devolve ordenado do maior prazo para o menor.
-    const destaques = vendasDoDia.filter((v) => v.prazo != null).slice(0, 3);
+    if (ind.acimaDoNormal.quantidade === 0) {
+      linhas.push(`✅ Nenhum pedido acima de ${limites.normal} dias.`);
+    } else {
+      linhas.push(
+        `Último vencimento acima de ${limites.normal} dias: ${
+          ind.acimaDoNormal.quantidade
+        } · ${moedaCurta(ind.acimaDoNormal.valor)}`,
+        `  ⚠️ Exceções estratégicas (${limites.normal + 1}–${
+          limites.maximo
+        }d): ${ind.excecoes.quantidade} · ${moedaCurta(ind.excecoes.valor)}`,
+        `  🚨 Acima de ${limites.maximo}d: ${
+          ind.naoPermitidos.quantidade
+        } · ${moedaCurta(ind.naoPermitidos.valor)}`
+      );
+    }
+
+    // agruparPedidos já devolve ordenado do maior prazo para o menor.
+    const destaques = pedidosDoDia.filter((p) => p.prazo != null).slice(0, 3);
     if (destaques.length > 0) {
       linhas.push("", "🔝 Maiores prazos de recebimento de hoje");
-      destaques.forEach((v, i) => {
+      destaques.forEach((p, i) => {
         linhas.push(
-          `${i + 1}. ${v.sacado} · ${v.empresa} · ${moedaCurta(
-            v.valorTotal
-          )} · ${v.prazo}d`
+          `${i + 1}. ${abreviarNome(p.sacado)} · ${empresaCurta(
+            p.empresa
+          )} · ${moedaCurta(p.valorTotal)} · ${
+            p.prazo
+          }d (venc. ${vencimentoCurto(p.ultimoVencimento)})`
         );
       });
     }
@@ -131,13 +152,11 @@ async function executar(req: Request) {
 
   const supabase = getSupabaseAdmin();
 
+  // `select("*")` para não quebrar caso a coluna do limite máximo ainda não
+  // exista no banco — lerLimites cai no padrão da política.
   const [{ data: boletosData }, { data: config }] = await Promise.all([
     supabase.from("boletos").select("*"),
-    supabase
-      .from("configuracoes")
-      .select("limite_prazo_dias, telegram_chat_ids")
-      .limit(1)
-      .maybeSingle(),
+    supabase.from("configuracoes").select("*").limit(1).maybeSingle(),
   ]);
 
   const chatIds: string[] = Array.isArray(config?.telegram_chat_ids)
@@ -150,7 +169,7 @@ async function executar(req: Request) {
 
   const texto = montarResumo(
     (boletosData ?? []) as Boleto[],
-    config?.limite_prazo_dias ?? 60,
+    lerLimites(config),
     hojeBrasilia()
   );
 
@@ -161,7 +180,7 @@ async function executar(req: Request) {
 
   await registrarAuditoria(
     "telegram.resumo",
-    `Resumo do dia enviado para ${enviados} destinatário(s).`
+    `Fechamento do dia enviado para ${enviados} destinatário(s).`
   );
 
   return NextResponse.json({ ok: true, enviados, motivo: "ok" });

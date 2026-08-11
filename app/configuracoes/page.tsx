@@ -15,6 +15,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { AJUDA } from "@/lib/ajuda-textos";
+import { LIMITES_PADRAO, lerLimites } from "@/lib/politica-prazo";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { Ajuda } from "@/components/ajuda";
@@ -53,8 +54,12 @@ interface ChatEncontrado {
 
 export default function ConfiguracoesPage() {
   const [configId, setConfigId] = useState<string | null>(null);
-  const [limiteSalvo, setLimiteSalvo] = useState<number>(60);
-  const [limite, setLimite] = useState<number>(60);
+  const [limiteSalvo, setLimiteSalvo] = useState<number>(LIMITES_PADRAO.normal);
+  const [limite, setLimite] = useState<number>(LIMITES_PADRAO.normal);
+  const [maximoSalvo, setMaximoSalvo] = useState<number>(LIMITES_PADRAO.maximo);
+  const [maximo, setMaximo] = useState<number>(LIMITES_PADRAO.maximo);
+  /** A coluna do limite máximo pode não existir ainda no banco. */
+  const [semColunaMaximo, setSemColunaMaximo] = useState(false);
   const [regra, setRegra] = useState<"venda" | "boleto">("venda");
   const [chatIds, setChatIds] = useState<string[]>([]);
   const [novoChat, setNovoChat] = useState("");
@@ -73,16 +78,22 @@ export default function ConfiguracoesPage() {
   const [aviso, setAviso] = useState<Aviso>(null);
 
   useEffect(() => {
+    // `select("*")` para não quebrar caso a coluna do limite máximo ainda não
+    // exista no banco.
     supabase
       .from("configuracoes")
-      .select("id, limite_prazo_dias, telegram_chat_ids, regra_limite")
+      .select("*")
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
+          const limites = lerLimites(data);
           setConfigId(data.id);
-          setLimite(data.limite_prazo_dias ?? 60);
-          setLimiteSalvo(data.limite_prazo_dias ?? 60);
+          setLimite(limites.normal);
+          setLimiteSalvo(limites.normal);
+          setMaximo(limites.maximo);
+          setMaximoSalvo(limites.maximo);
+          setSemColunaMaximo(!("limite_maximo_dias" in data));
           setRegra((data.regra_limite as "venda" | "boleto") ?? "venda");
           setChatIds(
             Array.isArray(data.telegram_chat_ids) ? data.telegram_chat_ids : []
@@ -206,12 +217,26 @@ export default function ConfiguracoesPage() {
     setSalvando(true);
     setAviso(null);
     try {
-      const payload = {
-        limite_prazo_dias: Number(limite) || 0,
+      const normal = Number(limite) || 0;
+      const max = Number(maximo) || 0;
+      if (max < normal) {
+        setAviso({
+          tipo: "erro",
+          texto:
+            "O prazo máximo não pode ser menor que o prazo padrão — não sobraria faixa para a exceção estratégica.",
+        });
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        limite_prazo_dias: normal,
         regra_limite: regra,
         telegram_chat_ids: chatIds,
         updated_at: new Date().toISOString(),
       };
+      // Só mandamos a coluna nova se ela existir, para não travar o salvamento
+      // de todo o resto num banco que ainda não recebeu o ALTER TABLE.
+      if (!semColunaMaximo) payload.limite_maximo_dias = max;
 
       let error;
       if (configId) {
@@ -229,7 +254,8 @@ export default function ConfiguracoesPage() {
         if (res.data) setConfigId(res.data.id);
       }
       if (error) throw error;
-      setLimiteSalvo(Number(limite) || 0);
+      setLimiteSalvo(normal);
+      if (!semColunaMaximo) setMaximoSalvo(max);
       setAviso({ tipo: "ok", texto: "Configurações salvas." });
     } catch (err) {
       console.error(err);
@@ -256,16 +282,62 @@ export default function ConfiguracoesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Limite de prazo</CardTitle>
+          <CardTitle>Política de prazo</CardTitle>
           <CardDescription>
-            Boletos com prazo (dias corridos) acima deste valor são marcados
-            como excedidos e geram alerta.
+            A regra vale sobre o pedido, pelo vencimento do último boleto.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-end gap-3">
+          <div className="mb-4 grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                🟢 Normal
+              </p>
+              <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">
+                até {limite} dias
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                ⚠️ Exceção estratégica
+              </p>
+              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                {limite + 1} a {maximo} dias · gera alerta
+              </p>
+            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
+              <p className="text-xs font-semibold text-red-800 dark:text-red-300">
+                🚨 Não permitido
+              </p>
+              <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">
+                acima de {maximo} dias · alerta crítico
+              </p>
+            </div>
+          </div>
+
+          {semColunaMaximo && (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              <p className="font-medium">
+                O prazo máximo ainda não é editável neste banco.
+              </p>
+              <p className="mt-1">
+                Rode este comando no SQL Editor do Supabase (é seguro, só
+                acrescenta uma coluna e não mexe em nada existente):
+              </p>
+              <code className="mt-1.5 block overflow-x-auto rounded bg-amber-100 px-2 py-1 font-mono text-[11px] dark:bg-amber-900/40">
+                alter table configuracoes add column if not exists
+                limite_maximo_dias integer not null default 180;
+              </code>
+              <p className="mt-1">
+                Até lá, o sistema usa {LIMITES_PADRAO.maximo} dias como prazo
+                máximo.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="limite" className="flex items-center gap-1.5">Limite (dias)<Ajuda titulo="Limite de prazo" texto={AJUDA.limite} /></Label>
+              <Label htmlFor="limite" className="flex items-center gap-1.5">Prazo padrão (dias)<Ajuda titulo="Prazo padrão" texto={AJUDA.limite} /></Label>
               <Input
                 id="limite"
                 type="number"
@@ -273,6 +345,18 @@ export default function ConfiguracoesPage() {
                 className="w-32"
                 value={limite}
                 onChange={(e) => setLimite(parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="maximo" className="flex items-center gap-1.5">Prazo máximo (dias)<Ajuda titulo="Prazo máximo" texto={AJUDA.limiteMaximo} /></Label>
+              <Input
+                id="maximo"
+                type="number"
+                min={1}
+                className="w-32"
+                disabled={semColunaMaximo}
+                value={maximo}
+                onChange={(e) => setMaximo(parseInt(e.target.value) || 0)}
               />
             </div>
             <div className="flex-1 space-y-1.5">
@@ -313,11 +397,12 @@ export default function ConfiguracoesPage() {
                 momento da importação. Depois de salvar um limite novo, clique
                 aqui para reavaliar o que já está no sistema.
               </p>
-              {Number(limite) !== limiteSalvo && (
+              {(Number(limite) !== limiteSalvo ||
+                Number(maximo) !== maximoSalvo) && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-                  Você mudou o limite para {limite}, mas o salvo ainda é{" "}
-                  {limiteSalvo}. Clique em “Salvar configurações” antes de
-                  recalcular.
+                  Você mudou a política na tela ({limite}/{maximo} dias), mas o
+                  salvo ainda é {limiteSalvo}/{maximoSalvo}. Clique em “Salvar
+                  configurações” antes de recalcular.
                 </p>
               )}
               <Button
@@ -332,7 +417,8 @@ export default function ConfiguracoesPage() {
                 ) : (
                   <RefreshCw />
                 )}
-                Recalcular com o limite salvo ({limiteSalvo} dias)
+                Recalcular com a política salva ({limiteSalvo}/{maximoSalvo}{" "}
+                dias)
               </Button>
             </div>
           )}
