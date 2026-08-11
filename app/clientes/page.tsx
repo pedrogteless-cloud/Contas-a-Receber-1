@@ -28,6 +28,8 @@ import {
   valorTotal,
 } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
+import { chaveCliente, indexarAcordos, type Acordo } from "@/lib/acordos";
+import { AcordoCliente } from "@/components/acordo-cliente";
 import {
   LIMITES_PADRAO,
   lerLimites,
@@ -83,6 +85,16 @@ export default function ClientesPage() {
   const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
   const limite = limites.normal;
   const [carregando, setCarregando] = useState(true);
+  const [acordos, setAcordos] = useState<Acordo[]>([]);
+  const indice = useMemo(() => indexarAcordos(acordos), [acordos]);
+
+  /** Insere, atualiza ou remove um acordo sem recarregar a página inteira. */
+  function aplicarAcordo(chave: string, a: Acordo | null) {
+    setAcordos((prev) => {
+      const resto = prev.filter((x) => x.cliente_chave !== chave);
+      return a ? [...resto, a] : resto;
+    });
+  }
 
   const [busca, setBusca] = useState("");
   const [empresa, setEmpresa] = useState<string>("Todas");
@@ -96,9 +108,11 @@ export default function ClientesPage() {
         .select("*")
         .limit(1)
         .maybeSingle(),
-    ]).then(([b, c]) => {
+      supabase.from("acordos_prazo").select("*"),
+    ]).then(([b, c, a]) => {
       setBoletos((b.data ?? []) as Boleto[]);
       setLimites(lerLimites(c.data));
+      setAcordos((a.data ?? []) as Acordo[]);
       setCarregando(false);
     });
   }, []);
@@ -327,6 +341,7 @@ export default function ClientesPage() {
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acima do limite<Ajuda titulo="Acima do limite" texto={AJUDA.acimaLimite} /></span></TableHead>
                     <TableHead className="text-right">Valor em carteira</TableHead>
                     <TableHead>Últ. vencimento</TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acordo<Ajuda titulo="Acordo de prazo" texto={AJUDA.acordoCliente} /></span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -394,6 +409,15 @@ export default function ClientesPage() {
                         </TableCell>
                         <TableCell>
                           <DataRelativa iso={c.ultimoVencimento} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <AcordoCliente
+                            nome={c.sacado}
+                            acordo={indice.get(chaveCliente(c.sacado))}
+                            aoSalvar={(a) =>
+                              aplicarAcordo(chaveCliente(c.sacado), a)
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     );

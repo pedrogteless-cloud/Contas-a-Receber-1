@@ -42,6 +42,8 @@ export const AJUDA = {
     "Três faixas, sempre pelo vencimento do ÚLTIMO boleto do pedido: até o prazo padrão = Normal; do padrão até o teto = Exceção estratégica (alerta); acima do teto = Não permitido (alerta crítico).",
   excecoesEstrategicas:
     "Pedidos com prazo entre o padrão e o teto da política. Não são proibidos, mas precisam de decisão consciente — por isso aparecem no alerta com cliente, pedido, valor, condição de pagamento e último vencimento.",
+  acordoCliente:
+    "Prazo combinado com aquele cliente, valendo daqui para frente. Se um pedido novo passar do acordo, o alerta diz que ele saiu do combinado. O sino cortado marca \u201cestou ciente\u201d: o cliente para de gerar alerta \u2014 mas pedidos acima do teto da pol\u00edtica continuam avisando, porque n\u00e3o permitido n\u00e3o se desliga.",
   naoPermitidos:
     "Pedidos com prazo acima do teto da política. Fogem da regra e geram alerta crítico, em mensagem separada para não se perderem no meio das exceções.",
   acimaLimite:

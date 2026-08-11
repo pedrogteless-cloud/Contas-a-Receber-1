@@ -1,0 +1,142 @@
+// ---------------------------------------------------------------------------
+// lib/acordos.ts
+// Acordo de prazo por cliente.
+//
+// A política geral (150/180) vale para todo mundo. Este módulo guarda as
+// exceções combinadas com CADA cliente:
+//
+//   prazo_acordado -> "conversamos e a partir de agora este cliente é 150"
+//   sem_alerta     -> "já estou ciente que este vai passar; não me avise"
+//
+// O cadastro se monta sozinho: os clientes vêm dos boletos importados, e aqui
+// só ficam os que você tocou. Ninguém precisa cadastrar a carteira inteira.
+// ---------------------------------------------------------------------------
+
+import type { LimitesPrazo, StatusPrazo } from "./politica-prazo";
+import { classificarPrazo } from "./politica-prazo";
+
+export interface Acordo {
+  id?: string;
+  cliente_chave: string;
+  cliente_nome: string;
+  /** Prazo combinado com o cliente daqui para frente. */
+  prazo_acordado: number | null;
+  /** "Já estou ciente que este cliente vai passar do padrão." */
+  sem_alerta: boolean;
+  observacao?: string | null;
+  /** Desde quando vale. Pedidos emitidos ANTES disso não são cobrados. */
+  acordado_em: string;
+  registrado_por?: string | null;
+}
+
+/**
+ * Chave de um cliente a partir do nome no boleto.
+ *
+ * Os relatórios do banco variam a grafia (acento, caixa, espaço duplo, e o
+ * código que às vezes vem colado: "38026 - REGINA LUCIA"). Normalizamos para
+ * que o mesmo cliente não vire dois acordos.
+ */
+export function chaveCliente(nome: string | null | undefined): string {
+  return (nome ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // tira acentos
+    .replace(/^\s*\d+\s*-\s*/, "") // tira "38026 - " do começo
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type MotivoAlerta =
+  | "nao_permitido" // acima do teto da política — sempre avisa
+  | "fora_do_acordo" // passou do que foi combinado com o cliente
+  | "excecao" // passou do padrão, sem acordo registrado
+  | "silenciado" // cliente marcado como "estou ciente"
+  | "dentro"; // nada a avisar
+
+export interface Avaliacao {
+  status: StatusPrazo | null;
+  motivo: MotivoAlerta;
+  /** Se entra nos alertas do Telegram. */
+  alertar: boolean;
+  /** O limite que valeu para este cliente, para explicar na mensagem. */
+  limiteAplicado: number;
+}
+
+/**
+ * Decide o que fazer com um pedido, considerando o acordo do cliente.
+ *
+ * Regras, nesta ordem:
+ *  1. acima do teto da política  -> alerta crítico SEMPRE, mesmo silenciado.
+ *     "Não permitido" não pode ser desligado por engano.
+ *  2. cliente marcado "estou ciente" -> não alerta (só aparece na tela).
+ *  3. tem acordo -> vale o acordo, quando ele for mais rígido que o padrão.
+ *  4. sem acordo -> vale o padrão da política.
+ */
+export function avaliarPedido(
+  prazo: number | null | undefined,
+  acordo: Acordo | undefined,
+  limites: LimitesPrazo,
+  dataImportacao?: string | null
+): Avaliacao {
+  const status = classificarPrazo(prazo, limites);
+  if (status == null || typeof prazo !== "number") {
+    return {
+      status: null,
+      motivo: "dentro",
+      alertar: false,
+      limiteAplicado: limites.normal,
+    };
+  }
+
+  // 1. O teto da política nunca é silenciado.
+  if (status === "nao_permitido") {
+    return {
+      status,
+      motivo: "nao_permitido",
+      alertar: true,
+      limiteAplicado: limites.maximo,
+    };
+  }
+
+  // O acordo só vale para o que foi emitido DEPOIS de combinado — o que já
+  // estava dentro de casa com a condição antiga não vira alerta retroativo.
+  const valeAgora =
+    acordo != null &&
+    (!dataImportacao ||
+      !acordo.acordado_em ||
+      dataImportacao >= acordo.acordado_em.slice(0, 10));
+
+  // 2. Cliente que você já sabe que vai passar.
+  if (valeAgora && acordo!.sem_alerta) {
+    return {
+      status,
+      motivo: "silenciado",
+      alertar: false,
+      limiteAplicado: limites.maximo,
+    };
+  }
+
+  // 3. Acordo mais rígido que o padrão (o caso do 8x que virou 150).
+  const combinado = valeAgora ? acordo!.prazo_acordado : null;
+  const limiteAplicado =
+    combinado != null ? Math.min(combinado, limites.normal) : limites.normal;
+
+  if (prazo > limiteAplicado) {
+    return {
+      status,
+      motivo: combinado != null ? "fora_do_acordo" : "excecao",
+      alertar: true,
+      limiteAplicado,
+    };
+  }
+
+  return { status, motivo: "dentro", alertar: false, limiteAplicado };
+}
+
+/** Indexa os acordos por chave de cliente, para consulta rápida. */
+export function indexarAcordos(acordos: Acordo[]): Map<string, Acordo> {
+  const mapa = new Map<string, Acordo>();
+  for (const a of acordos) mapa.set(a.cliente_chave, a);
+  return mapa;
+}

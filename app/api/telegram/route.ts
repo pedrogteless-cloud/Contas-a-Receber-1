@@ -10,6 +10,12 @@ import {
   type Pedido,
 } from "@/lib/politica-prazo";
 import { linhaPedido, moedaCurta } from "@/lib/telegram-formato";
+import {
+  avaliarPedido,
+  chaveCliente,
+  indexarAcordos,
+  type Acordo,
+} from "@/lib/acordos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,21 +80,49 @@ function montarLotes(
  * Os dois avisos da política, em mensagens separadas e nesta ordem: o crítico
  * primeiro, para não ficar enterrado no meio das exceções.
  */
-function montarAvisos(pedidos: Pedido[], limites: LimitesPrazo): Lote[] {
-  const naoPermitidos = pedidos.filter(
-    (p) => classificarPrazo(p.prazo, limites) === "nao_permitido"
-  );
-  const excecoes = pedidos.filter(
-    (p) => classificarPrazo(p.prazo, limites) === "excecao"
-  );
+function montarAvisos(
+  pedidos: Pedido[],
+  limites: LimitesPrazo,
+  acordos: Map<string, Acordo>
+): { lotes: Lote[]; silenciados: string[] } {
+  const naoPermitidos: Pedido[] = [];
+  const excecoes: Pedido[] = [];
+  const foraDoAcordo: Pedido[] = [];
+  // Pedidos de clientes que o time já marcou como "estou ciente": não viram
+  // aviso, mas são marcados como tratados para não ficarem pendentes para sempre.
+  const silenciados: string[] = [];
 
-  return [
+  for (const p of pedidos) {
+    const dataImportacao = p.boletos[0]?.data_importacao ?? null;
+    const av = avaliarPedido(
+      p.prazo,
+      acordos.get(chaveCliente(p.sacado)),
+      limites,
+      dataImportacao
+    );
+    if (!av.alertar) {
+      if (av.motivo === "silenciado") silenciados.push(...p.ids);
+      continue;
+    }
+    if (av.motivo === "nao_permitido") naoPermitidos.push(p);
+    else if (av.motivo === "fora_do_acordo") foraDoAcordo.push(p);
+    else excecoes.push(p);
+  }
+
+  const lotes = [
     ...montarLotes(
       naoPermitidos,
       (qtd, valor) =>
         `🚨 ${qtd} pedido${qtd > 1 ? "s" : ""} ACIMA DE ${
           limites.maximo
         } DIAS · ${moedaCurta(valor)}\nPrazo não permitido pela política.`
+    ),
+    ...montarLotes(
+      foraDoAcordo,
+      (qtd, valor) =>
+        `🤝 ${qtd} pedido${qtd > 1 ? "s" : ""} FORA DO ACORDO · ${moedaCurta(
+          valor
+        )}\nEstes clientes já tinham prazo combinado — e o pedido passou dele.`
     ),
     ...montarLotes(
       excecoes,
@@ -100,6 +134,8 @@ function montarAvisos(pedidos: Pedido[], limites: LimitesPrazo): Lote[] {
         } e ${limites.maximo} dias.`
     ),
   ];
+
+  return { lotes, silenciados };
 }
 
 async function enviarTelegram(
@@ -201,10 +237,23 @@ export async function POST(req: Request) {
     return NextResponse.json(resultado);
   }
 
+  const { data: acordosData } = await supabase.from("acordos_prazo").select("*");
+  const acordos = indexarAcordos((acordosData ?? []) as Acordo[]);
+
   const pedidos = agruparPedidos(pendentesBoletos);
+  const { lotes, silenciados } = montarAvisos(pedidos, limites, acordos);
   let enviados = 0;
 
-  for (const lote of montarAvisos(pedidos, limites)) {
+  // Quem está silenciado por acordo já fica resolvido: aparece nas telas como
+  // acima do limite, mas não volta na fila de alertas todo dia.
+  if (silenciados.length > 0) {
+    await supabase
+      .from("boletos")
+      .update({ alerta_enviado: true })
+      .in("id", silenciados);
+  }
+
+  for (const lote of lotes) {
     let todosOk = true;
     for (const chatId of chatIds) {
       const ok = await enviarTelegram(token, chatId, lote.texto);
@@ -225,7 +274,7 @@ export async function POST(req: Request) {
 
   const resultado: Resultado = {
     enviados,
-    pendentes: totalPendentes - enviados,
+    pendentes: totalPendentes - enviados - silenciados.length,
     motivo: "ok",
   };
   return NextResponse.json(resultado);
