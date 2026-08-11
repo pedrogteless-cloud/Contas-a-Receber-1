@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import { abreviarNome } from "./boletos";
-import { condicaoPagamento, type Pedido } from "./politica-prazo";
+import { condicaoPagamento, type DesvioMeta, type Pedido } from "./politica-prazo";
 
 /** "Ley Móveis" → "Móveis". O grupo já sabe de que empresa se trata. */
 export function empresaCurta(nome: string | null | undefined): string {
@@ -39,13 +39,27 @@ export function vencimentoCurto(iso: string | null | undefined): string {
  * Um pedido fora da política, com o que basta para decidir sem abrir o app:
  * quem comprou, qual pedido, quanto, em que condição e quando termina de pagar.
  */
-export function linhaPedido(p: Pedido): string {
-  return [
+export function linhaPedido(
+  p: Pedido,
+  posicao?: { prazoCliente: number | null; desvio: DesvioMeta | null; meta: number }
+): string {
+  const linhas = [
     `• ${abreviarNome(p.sacado)} · ${empresaCurta(p.empresa)}`,
     `  Pedido ${p.documento} · ${moedaCurta(p.valorTotal)}`,
     `  Condição: ${condicaoPagamento(p.prazosParcelas)}`,
     `  Último venc.: ${vencimentoCurto(p.ultimoVencimento)} · ${
       p.prazo != null ? `${p.prazo}d` : "—"
     }`,
-  ].join("\n");
+  ];
+
+  // Onde este cliente está em relação à meta — é o que diz se vale puxar
+  // uma conversa de redução com ele.
+  if (posicao?.desvio && posicao.prazoCliente != null) {
+    linhas.push(
+      `  ${posicao.desvio.emoji} Cliente em ${
+        Math.round(posicao.prazoCliente * 10) / 10
+      }d · ${posicao.desvio.texto} (${posicao.meta}d)`
+    );
+  }
+  return linhas.join("\n");
 }

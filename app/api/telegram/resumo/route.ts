@@ -5,17 +5,14 @@ import { prazoMedioPonderado, valorTotal } from "@/lib/analytics";
 import { abreviarNome, type Boleto } from "@/lib/boletos";
 import {
   agruparPedidos,
+  desvioDaMeta,
   indicadoresPolitica,
   lerLimites,
+  type DesvioMeta,
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
-import { dataCurtaISO, diasAte, hojeBrasilia } from "@/lib/tempo";
-import {
-  diasCurto,
-  empresaCurta,
-  moedaCurta,
-  vencimentoCurto,
-} from "@/lib/telegram-formato";
+import { dataCurtaISO, hojeBrasilia } from "@/lib/tempo";
+import { diasCurto, moedaCurta } from "@/lib/telegram-formato";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
 
 export const runtime = "nodejs";
@@ -59,6 +56,7 @@ function montarResumo(
     linhas.push("Nenhum boleto emitido hoje.");
   } else {
     const prazoDoDia = prazoMedioPonderado(doDia);
+    const desvio = desvioDaMeta(prazoDoDia, limites.meta);
 
     linhas.push(
       `📥 ${pedidosDoDia.length} pedido${
@@ -66,13 +64,9 @@ function montarResumo(
       } · ${doDia.length} boleto${doDia.length > 1 ? "s" : ""} · ${moedaCurta(
         valorTotal(doDia)
       )}`,
-      `⏳ Prazo médio concedido hoje: ${
-        prazoDoDia != null
-          ? `${diasCurto(prazoDoDia)} dias ${
-              prazoDoDia <= limites.meta ? "✅" : "🔺"
-            } (meta ${limites.meta})`
-          : "—"
-      }`,
+      `${desvio?.emoji ?? "⏳"} Prazo médio concedido hoje: ${
+        prazoDoDia != null ? `${diasCurto(prazoDoDia)}d` : "—"
+      }${desvio ? ` · ${desvio.texto} (${limites.meta}d)` : ""}`,
       ""
     );
 
@@ -92,46 +86,64 @@ function montarResumo(
       );
     }
 
-    // agruparPedidos já devolve ordenado do maior prazo para o menor.
-    const destaques = pedidosDoDia.filter((p) => p.prazo != null).slice(0, 3);
-    if (destaques.length > 0) {
-      linhas.push("", "🔝 Maiores prazos de recebimento de hoje");
-      destaques.forEach((p, i) => {
+    // Quem puxou a média para cima hoje — é aqui que o trabalho continua.
+    const porCliente = clientesDoDia(doDia, limites);
+    const acimaDaMeta = porCliente.filter((c) => c.desvio?.acimaDaMeta);
+    if (acimaDaMeta.length > 0) {
+      linhas.push("", "🔺 Clientes acima da meta hoje");
+      for (const c of acimaDaMeta.slice(0, 5)) {
         linhas.push(
-          `${i + 1}. ${abreviarNome(p.sacado)} · ${empresaCurta(
-            p.empresa
-          )} · ${moedaCurta(p.valorTotal)} · ${
-            p.prazo
-          }d (venc. ${vencimentoCurto(p.ultimoVencimento)})`
+          `• ${c.nome} · ${diasCurto(c.prazo)}d · ${c.desvio!.texto}`
         );
-      });
+      }
+    }
+    const dentro = porCliente.filter((c) => c.desvio && !c.desvio.acimaDaMeta);
+    if (dentro.length > 0) {
+      linhas.push(
+        "",
+        `✅ ${dentro.length} cliente${
+          dentro.length > 1 ? "s" : ""
+        } dentro da meta hoje.`
+      );
     }
   }
 
-  // Rodapé: a carteira toda em uma linha, para não perder a visão do conjunto.
+  // A carteira inteira, também contra a meta.
   const pmr = prazoMedioPonderado(boletos);
-  const proximos7 = boletos.filter((b) => {
-    const d = diasAte(b.data_vencimento, hoje);
-    return d != null && d >= 0 && d <= 7;
-  });
+  const desvioCarteira = desvioDaMeta(pmr, limites.meta);
   linhas.push(
     "",
-    `📦 Carteira ${moedaCurta(valorTotal(boletos))} · prazo médio concedido ${
+    `📦 Carteira: prazo médio concedido ${
       pmr != null ? `${diasCurto(pmr)}d` : "—"
-    } (meta ${limites.meta}d) · ${proximos7.length} vence(m) em 7d`
+    }${desvioCarteira ? ` · ${desvioCarteira.texto}` : ""}`
   );
 
-  const vencidos = boletos.filter((b) => {
-    const d = diasAte(b.data_vencimento, hoje);
-    return d != null && d < 0;
-  });
-  if (vencidos.length > 0) {
-    linhas.push(
-      `⚠️ ${vencidos.length} vencido(s) · ${moedaCurta(valorTotal(vencidos))}`
-    );
+  return linhas.join("\n");
+}
+
+/** Prazo médio concedido de cada cliente que emitiu boleto hoje. */
+function clientesDoDia(
+  doDia: Boleto[],
+  limites: LimitesPrazo
+): { nome: string; prazo: number; desvio: DesvioMeta | null }[] {
+  const grupos = new Map<string, Boleto[]>();
+  for (const b of doDia) {
+    const chave = b.sacado || "—";
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(b);
   }
 
-  return linhas.join("\n");
+  return Array.from(grupos.entries())
+    .map(([nome, lista]) => {
+      const prazo = prazoMedioPonderado(lista);
+      return {
+        nome: abreviarNome(nome),
+        prazo: prazo ?? 0,
+        desvio: desvioDaMeta(prazo, limites.meta),
+      };
+    })
+    .filter((c) => c.prazo > 0)
+    .sort((a, b) => b.prazo - a.prazo);
 }
 
 async function enviar(token: string, chatId: string, texto: string) {

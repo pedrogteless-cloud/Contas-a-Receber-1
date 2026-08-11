@@ -54,6 +54,45 @@ export function mediaDaCondicao(primeira: number, ultima: number): number {
   return Math.round((ultima + primeira) / 2);
 }
 
+export interface DesvioMeta {
+  /** Quanto por cento acima (positivo) ou abaixo (negativo) da meta. */
+  percentual: number;
+  acimaDaMeta: boolean;
+  /** "33% acima da meta" / "13% melhor que a meta" */
+  texto: string;
+  emoji: string;
+}
+
+/**
+ * Onde um prazo médio concedido está em relação à meta.
+ *
+ * É a leitura que orienta o trabalho do dia: não interessa o número solto,
+ * interessa se está apertando ou afrouxando em relação ao que se persegue.
+ */
+export function desvioDaMeta(
+  prazo: number | null | undefined,
+  meta: number
+): DesvioMeta | null {
+  if (typeof prazo !== "number" || meta <= 0) return null;
+  const percentual = Math.round(((prazo - meta) / meta) * 1000) / 10;
+  const acimaDaMeta = percentual > 0;
+
+  if (Math.abs(percentual) < 1) {
+    return { percentual, acimaDaMeta: false, texto: "na meta", emoji: "🎯" };
+  }
+  const pct = Math.abs(percentual).toLocaleString("pt-BR", {
+    maximumFractionDigits: 1,
+  });
+  return {
+    percentual,
+    acimaDaMeta,
+    texto: acimaDaMeta
+      ? `${pct}% acima da meta`
+      : `${pct}% melhor que a meta`,
+    emoji: acimaDaMeta ? "🔺" : "✅",
+  };
+}
+
 export const LIMITES_PADRAO: LimitesPrazo = {
   normal: 150,
   maximo: 180,

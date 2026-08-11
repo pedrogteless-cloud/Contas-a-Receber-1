@@ -4,11 +4,12 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { type Boleto } from "@/lib/boletos";
 import {
   agruparPedidos,
-  classificarPrazo,
+  desvioDaMeta,
   lerLimites,
   type LimitesPrazo,
   type Pedido,
 } from "@/lib/politica-prazo";
+import { prazoMedioPonderado } from "@/lib/analytics";
 import { linhaPedido, moedaCurta } from "@/lib/telegram-formato";
 import {
   avaliarPedido,
@@ -43,7 +44,8 @@ interface Lote {
  */
 function montarLotes(
   pedidos: Pedido[],
-  cabecalho: (qtd: number, valor: number) => string
+  cabecalho: (qtd: number, valor: number) => string,
+  posicao: (p: Pedido) => Parameters<typeof linhaPedido>[1]
 ): Lote[] {
   const lotes: Lote[] = [];
   let bloco: Pedido[] = [];
@@ -57,7 +59,7 @@ function montarLotes(
       texto: [
         cabecalho(bloco.length, total),
         "",
-        bloco.map(linhaPedido).join("\n\n"),
+        bloco.map((p) => linhaPedido(p, posicao(p))).join("\n\n"),
       ].join("\n"),
       ids: bloco.flatMap((p) => p.ids),
     });
@@ -66,7 +68,7 @@ function montarLotes(
   }
 
   for (const p of pedidos) {
-    const linha = linhaPedido(p);
+    const linha = linhaPedido(p, posicao(p));
     if (bloco.length > 0 && tamanho + linha.length > MAX_CARACTERES) fechar();
     bloco.push(p);
     tamanho += linha.length + 2;
@@ -83,7 +85,9 @@ function montarLotes(
 function montarAvisos(
   pedidos: Pedido[],
   limites: LimitesPrazo,
-  acordos: Map<string, Acordo>
+  acordos: Map<string, Acordo>,
+  /** Prazo médio concedido de cada cliente, de TODA a carteira dele. */
+  prazoPorCliente: Map<string, number>
 ): { lotes: Lote[]; silenciados: string[] } {
   const naoPermitidos: Pedido[] = [];
   const excecoes: Pedido[] = [];
@@ -109,20 +113,31 @@ function montarAvisos(
     else excecoes.push(p);
   }
 
+  const posicao = (p: Pedido) => {
+    const prazoCliente = prazoPorCliente.get(chaveCliente(p.sacado)) ?? null;
+    return {
+      prazoCliente,
+      desvio: desvioDaMeta(prazoCliente, limites.meta),
+      meta: limites.meta,
+    };
+  };
+
   const lotes = [
     ...montarLotes(
       naoPermitidos,
       (qtd, valor) =>
         `🚨 ${qtd} pedido${qtd > 1 ? "s" : ""} ACIMA DE ${
           limites.maximo
-        } DIAS · ${moedaCurta(valor)}\nPrazo não permitido pela política.`
+        } DIAS · ${moedaCurta(valor)}\nPrazo não permitido pela política.`,
+      posicao
     ),
     ...montarLotes(
       foraDoAcordo,
       (qtd, valor) =>
         `🤝 ${qtd} pedido${qtd > 1 ? "s" : ""} FORA DO ACORDO · ${moedaCurta(
           valor
-        )}\nEstes clientes já tinham prazo combinado — e o pedido passou dele.`
+        )}\nEstes clientes já tinham prazo combinado — e o pedido passou dele.`,
+      posicao
     ),
     ...montarLotes(
       excecoes,
@@ -131,7 +146,8 @@ function montarAvisos(
           qtd > 1 ? "s" : ""
         } · ${moedaCurta(valor)}\nPrazo de recebimento entre ${
           limites.normal + 1
-        } e ${limites.maximo} dias.`
+        } e ${limites.maximo} dias.`,
+      posicao
     ),
   ];
 
@@ -240,8 +256,30 @@ export async function POST(req: Request) {
   const { data: acordosData } = await supabase.from("acordos_prazo").select("*");
   const acordos = indexarAcordos((acordosData ?? []) as Acordo[]);
 
+  // Todos os boletos, para saber o prazo médio concedido de cada cliente —
+  // não só o do lote que está alertando agora.
+  const { data: todosData } = await supabase.from("boletos").select("*");
+  const prazoPorCliente = new Map<string, number>();
+  {
+    const porCliente = new Map<string, Boleto[]>();
+    for (const b of (todosData ?? []) as Boleto[]) {
+      const chave = chaveCliente(b.sacado);
+      if (!porCliente.has(chave)) porCliente.set(chave, []);
+      porCliente.get(chave)!.push(b);
+    }
+    for (const [chave, lista] of porCliente) {
+      const pm = prazoMedioPonderado(lista);
+      if (pm != null) prazoPorCliente.set(chave, pm);
+    }
+  }
+
   const pedidos = agruparPedidos(pendentesBoletos);
-  const { lotes, silenciados } = montarAvisos(pedidos, limites, acordos);
+  const { lotes, silenciados } = montarAvisos(
+    pedidos,
+    limites,
+    acordos,
+    prazoPorCliente
+  );
   let enviados = 0;
 
   // Quem está silenciado por acordo já fica resolvido: aparece nas telas como

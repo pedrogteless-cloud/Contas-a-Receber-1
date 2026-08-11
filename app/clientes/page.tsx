@@ -37,6 +37,7 @@ import {
 import {
   LIMITES_PADRAO,
   agruparPedidos,
+  desvioDaMeta,
   lerLimites,
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
@@ -347,6 +348,7 @@ export default function ClientesPage() {
                     <TableHead>Empresa</TableHead>
                     <TableHead className="text-right">Boletos</TableHead>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo concedido<Ajuda titulo="Prazo médio concedido" texto={AJUDA.prazoMedio} /></span></TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Vs. meta<Ajuda titulo="Meta de prazo médio concedido" texto={AJUDA.metaPrazoMedio} /></span></TableHead>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acima do limite<Ajuda titulo="Acima do limite" texto={AJUDA.acimaLimite} /></span></TableHead>
                     <TableHead className="text-right">Valor em carteira</TableHead>
                     <TableHead>Últ. vencimento</TableHead>
@@ -403,6 +405,21 @@ export default function ClientesPage() {
                           ) : (
                             "—"
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {(() => {
+                            const d = desvioDaMeta(c.prazoMedio, limites.meta);
+                            if (!d) return <span className="text-muted-foreground">—</span>;
+                            return (
+                              <Badge
+                                variant={d.acimaDaMeta ? "warning" : "success"}
+                                title={`Meta ${limites.meta} dias`}
+                              >
+                                {d.acimaDaMeta ? "+" : ""}
+                                {d.percentual}%
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {c.acimaLimite > 0 ? (
