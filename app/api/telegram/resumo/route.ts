@@ -61,16 +61,18 @@ function montarResumo(boletos: Boleto[], limite: number, hoje: string): string {
         prazoDoDia != null ? `${diasCurto(prazoDoDia)} dias` : "—"
       }`,
       acima.length > 0
-        ? `🔴 ${acima.length} acima de ${limite}d · ${moedaCurta(
+        ? `🔴 ${acima.length} prazo${
+            acima.length > 1 ? "s" : ""
+          } de recebimento acima de ${limite}d · ${moedaCurta(
             acima.reduce((s, v) => s + v.valorTotal, 0)
           )}`
-        : `🟢 Nenhuma acima de ${limite}d`
+        : `🟢 Nenhum prazo de recebimento acima de ${limite}d`
     );
 
     // agruparParaTelegram já devolve ordenado do maior prazo para o menor.
     const destaques = vendasDoDia.filter((v) => v.prazo != null).slice(0, 3);
     if (destaques.length > 0) {
-      linhas.push("", "🔝 Maiores prazos de hoje");
+      linhas.push("", "🔝 Maiores prazos de recebimento de hoje");
       destaques.forEach((v, i) => {
         linhas.push(
           `${i + 1}. ${v.sacado} · ${v.empresa} · ${moedaCurta(

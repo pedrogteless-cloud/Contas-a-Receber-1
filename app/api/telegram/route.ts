@@ -29,12 +29,13 @@ interface Lote {
 }
 
 /**
- * Junta TODAS as vendas acima do limite num aviso só — ou em poucos, quando a
- * lista é longa demais para uma mensagem.
+ * Junta TODOS os prazos de recebimento acima do limite num aviso só — ou em
+ * poucos, quando a lista é longa demais para uma mensagem — com os títulos de
+ * cada um listados logo abaixo.
  *
- * Antes saía uma mensagem comprida por venda, com todas as parcelas listadas.
- * Como a importação acontece no fim do expediente, isso enchia o grupo de
- * blocos que ninguém conseguia ler de relance.
+ * Antes saía uma mensagem separada por prazo de recebimento. Como a importação
+ * acontece no fim do expediente, isso enchia o grupo de blocos que ninguém
+ * conseguia ler de relance.
  */
 function montarLotes(vendas: VendaResumida[], limite: number): Lote[] {
   const lotes: Lote[] = [];
@@ -44,11 +45,13 @@ function montarLotes(vendas: VendaResumida[], limite: number): Lote[] {
   function fechar() {
     if (bloco.length === 0) return;
     const total = bloco.reduce((s, v) => s + v.valorTotal, 0);
-    const titulo = `🔴 ${bloco.length} venda${
+    const titulo = `🔴 ${bloco.length} prazo${
       bloco.length > 1 ? "s" : ""
-    } acima de ${limite} dias · ${moedaCurta(total)}`;
+    } de recebimento acima de ${limite} dias · ${moedaCurta(total)}`;
     lotes.push({
-      texto: [titulo, "", ...bloco.map(linhaVenda)].join("\n"),
+      // Linha em branco entre os blocos: sem ela, os títulos de um prazo
+      // colam no cabeçalho do seguinte.
+      texto: [titulo, "", bloco.map(linhaVenda).join("\n\n")].join("\n"),
       ids: bloco.flatMap((v) => v.ids),
     });
     bloco = [];
