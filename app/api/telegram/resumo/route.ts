@@ -112,7 +112,7 @@ function montarResumo(
   });
   linhas.push(
     "",
-    `📦 Carteira ${moedaCurta(valorTotal(boletos))} · PMR ${
+    `📦 Carteira ${moedaCurta(valorTotal(boletos))} · prazo médio concedido ${
       pmr != null ? `${diasCurto(pmr)}d` : "—"
     } · ${proximos7.length} vence(m) em 7d`
   );

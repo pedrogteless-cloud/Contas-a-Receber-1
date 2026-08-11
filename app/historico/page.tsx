@@ -219,7 +219,7 @@ export default function HistoricoPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Total de boletos" value={String(filtrados.length)} icon={FileStack} tom="brand" ajuda="Quantidade de boletos que passam pelos filtros atuais." />
           <StatCard
-            label="Prazo médio de recebimento"
+            label="Prazo médio concedido"
             value={pm != null ? `${pm} dias` : "—"}
             icon={Gauge}
             ajuda={AJUDA.prazoMedio}

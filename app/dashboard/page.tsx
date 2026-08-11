@@ -194,7 +194,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={`Indicadores de prazo de recebimento — limite atual de ${limite} dias.`}
+        description={`Prazos concedidos nas vendas — política de ${limites.normal}/${limites.maximo} dias.`}
       >
         <div className="space-y-1">
           <Label className="text-xs">Empresa</Label>
@@ -240,23 +240,25 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
-            label="Prazo médio (ponderado)"
+            label="Prazo médio concedido"
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
             hint={
-              pmSimples != null ? `Média simples: ${pmSimples} dias` : undefined
+              pmSimples != null
+                ? `Ponderado pelo valor · média simples: ${pmSimples} dias`
+                : "Ponderado pelo valor"
             }
             icon={Gauge}
             tom="brand"
             ajuda={AJUDA.prazoMedio}
           />
           <StatCard
-            label="Prazo médio · Ley Móveis"
+            label="Prazo concedido · Ley Móveis"
             value={pmMoveis != null ? `${pmMoveis} dias` : "—"}
             icon={Sofa}
             ajuda={AJUDA.prazoMedioEmpresa}
           />
           <StatCard
-            label="Prazo médio · Ley Colchões"
+            label="Prazo concedido · Ley Colchões"
             value={pmColchoes != null ? `${pmColchoes} dias` : "—"}
             icon={BedDouble}
             ajuda={AJUDA.prazoMedioEmpresa}
@@ -379,7 +381,7 @@ export default function DashboardPage() {
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard
-              title="Prazo médio por empresa"
+              title="Prazo médio concedido por empresa"
               subtitle="Dias corridos entre entrada e vencimento"
               mounted={mounted}
               ajuda={AJUDA.prazoMedioEmpresa}
@@ -401,9 +403,9 @@ export default function DashboardPage() {
                 <Tooltip
                   cursor={{ fill: isDark ? "#ffffff10" : "#00000008" }}
                   contentStyle={tip}
-                  formatter={(v: number) => [`${v} dias`, "Prazo médio"]}
+                  formatter={(v: number) => [`${v} dias`, "Prazo concedido"]}
                 />
-                <Bar dataKey="prazoMedio" name="Prazo médio" radius={[6, 6, 0, 0]} maxBarSize={90}>
+                <Bar dataKey="prazoMedio" name="Prazo concedido" radius={[6, 6, 0, 0]} maxBarSize={90}>
                   {porEmpresa.map((d) => (
                     <Cell key={d.empresa} fill={corEmpresa(d.empresa, isDark)} />
                   ))}
@@ -483,7 +485,7 @@ export default function DashboardPage() {
             </ChartCard>
 
             <ChartCard
-              title="Evolução do prazo médio"
+              title="Evolução do prazo concedido"
               subtitle="Por mês de vencimento e empresa"
               mounted={mounted}
               ajuda={AJUDA.evolucaoPrazo}
@@ -576,7 +578,7 @@ export default function DashboardPage() {
                     <TableRow>
                       <TableHead>Cliente</TableHead>
                       <TableHead className="text-right">Boletos</TableHead>
-                      <TableHead className="text-right">Prazo méd.</TableHead>
+                      <TableHead className="text-right">Prazo conc.</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                     </TableRow>
                   </TableHeader>

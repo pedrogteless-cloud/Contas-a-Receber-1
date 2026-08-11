@@ -180,7 +180,7 @@ export default function ClientesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Clientes"
-        description={`Prazo médio e carteira por cliente — limite atual de ${limite} dias.`}
+        description={`Prazo concedido e carteira por cliente — política de ${limites.normal}/${limites.maximo} dias.`}
       >
         <div className="space-y-1">
           <Label className="text-xs">Empresa</Label>
@@ -235,7 +235,7 @@ export default function ClientesPage() {
             ajuda={AJUDA.valorCarteira}
           />
           <StatCard
-            label="Prazo médio (ponderado)"
+            label="Prazo médio concedido"
             value={pmGeral != null ? `${pmGeral} dias` : "—"}
             hint={
               pmSimplesGeral != null
@@ -289,10 +289,10 @@ export default function ClientesPage() {
                   <Tooltip
                     cursor={{ fill: isDark ? "#ffffff10" : "#00000008" }}
                     contentStyle={tip}
-                    formatter={(v: number) => [`${v} dias`, "Prazo médio"]}
+                    formatter={(v: number) => [`${v} dias`, "Prazo concedido"]}
                   />
                   <ReferenceLine x={limite} stroke={CHART.critical} strokeDasharray="4 4" />
-                  <Bar dataKey="prazoMedio" name="Prazo médio" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                  <Bar dataKey="prazoMedio" name="Prazo concedido" radius={[0, 6, 6, 0]} maxBarSize={22}>
                     {grafico.map((c) => (
                       <Cell
                         key={c.sacado}
@@ -346,7 +346,7 @@ export default function ClientesPage() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Empresa</TableHead>
                     <TableHead className="text-right">Boletos</TableHead>
-                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo médio<Ajuda titulo="Prazo médio" texto={AJUDA.prazoMedio} /></span></TableHead>
+                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo concedido<Ajuda titulo="Prazo médio concedido" texto={AJUDA.prazoMedio} /></span></TableHead>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acima do limite<Ajuda titulo="Acima do limite" texto={AJUDA.acimaLimite} /></span></TableHead>
                     <TableHead className="text-right">Valor em carteira</TableHead>
                     <TableHead>Últ. vencimento</TableHead>

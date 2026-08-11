@@ -25,9 +25,9 @@ export const AJUDA = {
   prazoDias:
     "Prazo do boleto = número de dias corridos entre a data de entrada (emissão) e a data de vencimento.",
   prazoMedio:
-    "Ponderado pelo valor (PMR): soma de (valor × prazo) ÷ soma dos valores. Mostra quanto tempo o DINHEIRO fica na rua — um título de R$ 10.000 pesa 100x mais que um de R$ 100. A 'média simples' logo abaixo trata todo boleto igual e responde outra coisa: o prazo típico por título.",
+    "Prazo médio CONCEDIDO, ponderado pelo valor: soma de (valor × prazo) ÷ soma dos valores. Mostra por quanto tempo o dinheiro fica na rua — um título de R$ 10.000 pesa 100x mais que um de R$ 100. Atenção: não é o \"PMR\" da contabilidade (contas a receber ÷ receita × 365), que mede quanto tempo você LEVA para receber. Este mede o prazo que você DÁ. A média simples ao lado trata todo boleto igual e responde outra coisa: o prazo típico por título.",
   prazoMedioEmpresa:
-    "Mesma conta do prazo médio ponderado, considerando só os boletos daquela empresa.",
+    "Mesma conta do prazo médio concedido, considerando só os boletos daquela empresa.",
   prazoMedioSimples:
     "Média simples: soma dos prazos ÷ quantidade de boletos. Cada boleto pesa igual, independentemente do valor. Serve para ver o prazo típico concedido por título — não o risco financeiro.",
   regraLimite:
@@ -59,7 +59,7 @@ export const AJUDA = {
   faixaPrazo:
     "Distribuição dos boletos por faixa de prazo (até 30, 31–45, 46–60, 61–90 e mais de 90 dias). Ajuda a ver a concentração dos prazos concedidos.",
   evolucaoPrazo:
-    "Prazo médio ponderado pelo valor, agrupado pelo mês de vencimento e separado por empresa. Mostra se os prazos estão aumentando ou diminuindo.",
+    "Prazo concedido, ponderado pelo valor, agrupado pelo mês de VENCIMENTO e separado por empresa. Cuidado ao ler tendência: numa venda parcelada as parcelas caem em meses diferentes, e os meses mais à frente só recebem as parcelas finais — o que faz a linha subir sozinha na ponta direita.",
   participacaoEmpresa:
     "Quanto cada empresa representa do valor total em carteira.",
   topClientes:

@@ -40,10 +40,14 @@ export function prazoMedio(boletos: Boleto[]): number | null {
 }
 
 /**
- * Prazo médio PONDERADO PELO VALOR (PMR) — a métrica financeira correta:
+ * Prazo médio CONCEDIDO, ponderado pelo valor.
+ *
+ * Não confundir com o PMR da contabilidade (contas a receber ÷ receita × 365),
+ * que mede quanto tempo a empresa LEVA para receber. Este mede o prazo que a
+ * empresa DÁ — e é o que dá para calcular sem baixa dos títulos.
  * cada boleto pesa proporcionalmente ao quanto representa em dinheiro.
  *
- *   PMR = Σ(valor × prazo) ÷ Σ(valor)
+ *   média = Σ(valor × prazo) ÷ Σ(valor)
  *
  * Responde "quanto tempo, em média, o dinheiro fica na rua". Um título de
  * R$ 10.000 a 90 dias pesa muito mais do que dez de R$ 100 a 30 dias.
@@ -300,7 +304,7 @@ export interface ClienteDetalhe {
   empresas: string[];
   quantidade: number;
   valor: number;
-  prazoMedio: number | null; // ponderado pelo valor (PMR)
+  prazoMedio: number | null; // concedido, ponderado pelo valor
   prazoMedioSimples: number | null; // cada boleto pesa igual
   acimaLimite: number;
   percentualAcima: number; // 0-100
