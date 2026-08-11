@@ -49,7 +49,7 @@ export const AJUDA = {
   naoPermitidos:
     "Pedidos com prazo acima do teto da política. Fogem da regra e geram alerta crítico, em mensagem separada para não se perderem no meio das exceções.",
   acimaLimite:
-    "Quantidade e percentual de boletos cujo prazo passou do limite. O percentual é sobre o total de boletos filtrados.",
+    "Conta BOLETOS, um a um, cujo prazo passou do padrão (já com a tolerância). É diferente do bloco \"Política de prazo\", que conta PEDIDOS pelo vencimento do último título — por isso os dois números não batem, e não deveriam mesmo bater.",
   valorCarteira:
     "Soma do valor de todos os boletos filtrados — o total que ainda há a receber no recorte atual.",
   aVencer7:
@@ -57,9 +57,9 @@ export const AJUDA = {
   vencidos:
     "Boletos cuja data de vencimento já passou, considerando a data de hoje. Nas tabelas eles aparecem em vermelho, com há quanto tempo venceram.",
   faixaPrazo:
-    "Distribuição dos boletos por faixa de prazo (até 30, 31–45, 46–60, 61–90 e mais de 90 dias). Ajuda a ver a concentração dos prazos concedidos.",
+    "Distribuição dos boletos por faixa de prazo. As faixas acompanham a política: as duas últimas são exatamente a exceção estratégica e o não permitido. Ajuda a ver onde a carteira está concentrada.",
   evolucaoPrazo:
-    "Prazo concedido, ponderado pelo valor, agrupado pelo mês de VENCIMENTO e separado por empresa. Cuidado ao ler tendência: numa venda parcelada as parcelas caem em meses diferentes, e os meses mais à frente só recebem as parcelas finais — o que faz a linha subir sozinha na ponta direita.",
+    "Prazo de recebimento dos pedidos, ponderado pelo valor e agrupado pelo mês da VENDA. Cada venda entra uma única vez, no mês em que foi feita — então a linha mostra de verdade se os prazos concedidos estão subindo ou caindo.",
   participacaoEmpresa:
     "Quanto cada empresa representa do valor total em carteira.",
   topClientes:

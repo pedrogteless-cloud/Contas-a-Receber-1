@@ -10,6 +10,7 @@ import {
   type Boleto,
 } from "./boletos";
 import { hojeISO } from "./tempo";
+import { agruparPedidos, type LimitesPrazo } from "./politica-prazo";
 
 const MESES_PT = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -94,12 +95,21 @@ export interface EstatisticaLimite {
 }
 
 /** Quantidade, % e valor dos boletos acima do limite de prazo. */
+/**
+ * Conta BOLETOS acima do limite — título por título.
+ *
+ * Não confundir com os indicadores da política, que contam PEDIDOS pelo
+ * vencimento do último título. São perguntas diferentes, e por isso os
+ * rótulos na tela dizem explicitamente qual unidade está sendo contada.
+ * A tolerância de calendário vale aqui também, para os números conversarem.
+ */
 export function estatisticasLimite(
   boletos: Boleto[],
-  limite: number
+  limites: LimitesPrazo
 ): EstatisticaLimite {
+  const teto = limites.normal + limites.tolerancia;
   const acima = boletos.filter(
-    (b) => typeof b.prazo_dias === "number" && b.prazo_dias > limite
+    (b) => typeof b.prazo_dias === "number" && b.prazo_dias > teto
   );
   const quantidade = acima.length;
   const percentual =
@@ -197,15 +207,42 @@ export interface FaixaPrazo {
   valor: number;
 }
 
-const FAIXAS: { faixa: string; min: number; max: number }[] = [
-  { faixa: "Até 30", min: -Infinity, max: 30 },
-  { faixa: "31–45", min: 31, max: 45 },
-  { faixa: "46–60", min: 46, max: 60 },
-  { faixa: "61–90", min: 61, max: 90 },
-  { faixa: "+90", min: 91, max: Infinity },
-];
+/**
+ * As faixas acompanham a POLÍTICA, não são fixas.
+ *
+ * Antes eram "até 30 / 31–45 / 46–60 / 61–90 / +90", desenhadas para um limite
+ * de 60 dias. Com a política em 150/180 isso empilhava quase tudo em "+90" e o
+ * gráfico deixava de informar. Agora os cortes saem dos próprios limites, e as
+ * duas últimas faixas são exatamente a exceção estratégica e o não permitido.
+ */
+export function faixasDaPolitica(
+  limites: LimitesPrazo
+): { faixa: string; min: number; max: number }[] {
+  const cortes = Array.from(
+    new Set([60, 90, 120, limites.normal, limites.maximo])
+  )
+    .filter((c) => c > 0)
+    .sort((a, b) => a - b);
 
-export function distribuicaoPorFaixa(boletos: Boleto[]): FaixaPrazo[] {
+  const faixas: { faixa: string; min: number; max: number }[] = [];
+  let anterior = 0;
+  for (const corte of cortes) {
+    faixas.push({
+      faixa: anterior === 0 ? `Até ${corte}` : `${anterior + 1}–${corte}`,
+      min: anterior === 0 ? -Infinity : anterior + 1,
+      max: corte,
+    });
+    anterior = corte;
+  }
+  faixas.push({ faixa: `+${anterior}`, min: anterior + 1, max: Infinity });
+  return faixas;
+}
+
+export function distribuicaoPorFaixa(
+  boletos: Boleto[],
+  limites: LimitesPrazo
+): FaixaPrazo[] {
+  const FAIXAS = faixasDaPolitica(limites);
   const base = FAIXAS.map((f) => ({ faixa: f.faixa, quantidade: 0, valor: 0 }));
   for (const b of boletos) {
     if (typeof b.prazo_dias !== "number") continue;
@@ -228,6 +265,61 @@ export interface PontoEvolucao {
   mes: string; // rótulo "mmm/aa"
   mesISO: string; // "yyyy-mm"
   [empresa: string]: number | string | null;
+}
+
+/**
+ * Evolução do prazo concedido, pelo mês da VENDA.
+ *
+ * A versão por mês de vencimento distorce a leitura: numa venda parcelada as
+ * parcelas caem em meses diferentes, e os meses mais à frente só recebem as
+ * parcelas finais — a linha sobe sozinha na ponta direita sem ninguém ter
+ * alongado nada. Agrupando pela entrada e usando o prazo de recebimento do
+ * PEDIDO, cada venda entra uma vez, no mês em que foi feita.
+ */
+export function evolucaoPrazoConcedido(
+  boletos: Boleto[],
+  empresas: string[]
+): PontoEvolucao[] {
+  const pedidos = agruparPedidos(boletos);
+
+  // mesISO -> empresa -> [{ prazo, valor }]
+  const mapa = new Map<string, Map<string, { prazo: number; valor: number }[]>>();
+  for (const p of pedidos) {
+    const entrada = p.boletos[0]?.data_entrada;
+    if (!entrada || typeof p.prazo !== "number") continue;
+    const mesISO = entrada.slice(0, 7);
+    const empresa = p.empresa || "Não classificado";
+    if (!mapa.has(mesISO)) mapa.set(mesISO, new Map());
+    const porEmpresa = mapa.get(mesISO)!;
+    if (!porEmpresa.has(empresa)) porEmpresa.set(empresa, []);
+    porEmpresa.get(empresa)!.push({ prazo: p.prazo, valor: p.valorTotal });
+  }
+
+  const lista =
+    empresas.length > 0
+      ? empresas
+      : Array.from(new Set(pedidos.map((p) => p.empresa || "Não classificado")));
+
+  return Array.from(mapa.keys())
+    .sort()
+    .map((mesISO) => {
+      const [ano, mes] = mesISO.split("-");
+      const ponto: PontoEvolucao = {
+        mes: `${MESES_PT[Number(mes) - 1]}/${ano.slice(2)}`,
+        mesISO,
+      };
+      for (const emp of lista) {
+        const itens = mapa.get(mesISO)!.get(emp) ?? [];
+        const somaValor = itens.reduce((s, i) => s + i.valor, 0);
+        ponto[emp] =
+          somaValor > 0
+            ? Math.round(
+                (itens.reduce((s, i) => s + i.valor * i.prazo, 0) / somaValor) * 10
+              ) / 10
+            : null;
+      }
+      return ponto;
+    });
 }
 
 export function evolucaoMensalPrazo(
@@ -423,20 +515,23 @@ export function agruparVendas(boletos: Boleto[], limite: number): VendaAPrazo[] 
 // Insights automáticos
 // ---------------------------------------------------------------------------
 
-export function gerarInsights(boletos: Boleto[], limite: number): string[] {
+export function gerarInsights(
+  boletos: Boleto[],
+  limites: LimitesPrazo
+): string[] {
   const insights: string[] = [];
   if (boletos.length === 0) return insights;
 
   const pm = prazoMedioPonderado(boletos);
   const pmSimples = prazoMedio(boletos);
   if (pm != null) {
-    if (pm > limite) {
+    if (pm > limites.normal) {
       insights.push(
-        `O prazo médio ponderado da carteira (${pm} dias) está acima do limite de ${limite} dias.`
+        `O prazo médio concedido na carteira (${pm} dias) está acima do padrão de ${limites.normal} dias.`
       );
     } else {
       insights.push(
-        `O prazo médio ponderado da carteira (${pm} dias) está dentro do limite de ${limite} dias.`
+        `O prazo médio concedido na carteira (${pm} dias) está dentro do padrão de ${limites.normal} dias.`
       );
     }
     // Diferença relevante entre as duas médias indica concentração de valor
@@ -465,14 +560,14 @@ export function gerarInsights(boletos: Boleto[], limite: number): string[] {
     );
   }
 
-  const est = estatisticasLimite(boletos, limite);
+  const est = estatisticasLimite(boletos, limites);
   if (est.quantidade > 0) {
     insights.push(
-      `${est.quantidade} boleto(s) acima do limite (${est.percentual}% da carteira), ` +
+      `${est.quantidade} boleto(s) acima de ${limites.normal} dias (${est.percentual}% da carteira), ` +
         `somando ${formatarMoeda(est.valor)}.`
     );
   } else {
-    insights.push("Nenhum boleto acima do limite de prazo. 👍");
+    insights.push(`Nenhum boleto acima de ${limites.normal} dias. 👍`);
   }
 
   const aVencer = aVencerEmDias(boletos, 7);

@@ -34,7 +34,7 @@ import {
   aVencerEmDias,
   distribuicaoPorFaixa,
   estatisticasLimite,
-  evolucaoMensalPrazo,
+  evolucaoPrazoConcedido,
   gerarInsights,
   participacaoPorEmpresa,
   prazoMedio,
@@ -138,7 +138,7 @@ export default function DashboardPage() {
   const pmMoveis = prazoMedioPonderadoEmpresa(dados, "Ley Móveis");
   const pmColchoes = prazoMedioPonderadoEmpresa(dados, "Ley Colchões");
   const total = valorTotal(dados);
-  const est = estatisticasLimite(dados, limite);
+  const est = estatisticasLimite(dados, limites);
   const aVencer = aVencerEmDias(dados, 7);
 
   // Contexto de tempo: o que já venceu e o que vence hoje.
@@ -158,17 +158,17 @@ export default function DashboardPage() {
 
   const porEmpresa = useMemo(() => prazoMedioPorEmpresa(dados), [dados]);
   const participacao = useMemo(() => participacaoPorEmpresa(dados), [dados]);
-  const faixas = useMemo(() => distribuicaoPorFaixa(dados), [dados]);
+  const faixas = useMemo(() => distribuicaoPorFaixa(dados, limites), [dados, limites]);
   const empresasPresentes = useMemo(
     () => Array.from(new Set(dados.map((b) => b.empresa || "Não classificado"))),
     [dados]
   );
   const evolucao = useMemo(
-    () => evolucaoMensalPrazo(dados, empresasPresentes),
+    () => evolucaoPrazoConcedido(dados, empresasPresentes),
     [dados, empresasPresentes]
   );
   const top = useMemo(() => topClientes(dados, 8), [dados]);
-  const insights = useMemo(() => gerarInsights(dados, limite), [dados, limite]);
+  const insights = useMemo(() => gerarInsights(dados, limites), [dados, limites]);
 
   // Política de prazo: avaliada por PEDIDO, pelo vencimento do último boleto.
   const pedidos = useMemo(() => agruparPedidos(dados), [dados]);
@@ -272,7 +272,7 @@ export default function DashboardPage() {
             ajuda={AJUDA.valorCarteira}
           />
           <StatCard
-            label="Acima do limite"
+            label={`Boletos acima de ${limites.normal} dias`}
             value={`${est.quantidade} · ${est.percentual}%`}
             hint={formatarMoeda(est.valor)}
             icon={AlertTriangle}
@@ -447,7 +447,7 @@ export default function DashboardPage() {
 
             <ChartCard
               title="Distribuição por faixa de prazo"
-              subtitle="Quantidade de boletos por faixa (dias)"
+              subtitle={`Boletos por faixa · política ${limites.normal}/${limites.maximo} dias`}
               mounted={mounted}
               ajuda={AJUDA.faixaPrazo}
             >
@@ -486,7 +486,7 @@ export default function DashboardPage() {
 
             <ChartCard
               title="Evolução do prazo concedido"
-              subtitle="Por mês de vencimento e empresa"
+              subtitle="Por mês da venda e empresa"
               mounted={mounted}
               ajuda={AJUDA.evolucaoPrazo}
             >

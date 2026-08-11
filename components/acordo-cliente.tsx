@@ -24,12 +24,14 @@ export function AcordoCliente({
   nome,
   acordo,
   anterior,
+  valorCarteira,
   aoSalvar,
 }: {
   nome: string;
   acordo: Acordo | undefined;
   /** O que o cliente praticava — o sistema descobre e grava como "antes". */
   anterior: { condicao: string | null; prazo: number | null };
+  valorCarteira?: number;
   aoSalvar: (a: Acordo | null) => void;
 }) {
   const [editando, setEditando] = useState(false);
@@ -70,8 +72,28 @@ export function AcordoCliente({
         .single();
       if (error) throw error;
 
-      aoSalvar(data as Acordo);
+      const salvo = data as Acordo;
+      aoSalvar(salvo);
       setEditando(false);
+
+      // Redução negociada vira notícia boa no grupo. Falhar aqui não pode
+      // desfazer o acordo, que já está gravado — por isso o erro é engolido.
+      const antes = salvo.prazo_anterior ?? anterior.prazo;
+      const depois = salvo.prazo_acordado;
+      if (typeof antes === "number" && typeof depois === "number" && depois < antes) {
+        fetch("/api/telegram/acordo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cliente: nome,
+            condicaoAnterior: salvo.condicao_anterior ?? anterior.condicao,
+            prazoAnterior: antes,
+            condicaoNova: salvo.condicao_acordada,
+            prazoNovo: depois,
+            valorCarteira,
+          }),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
       setErro("Não foi possível salvar.");

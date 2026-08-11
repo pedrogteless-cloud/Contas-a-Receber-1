@@ -424,6 +424,7 @@ export default function ClientesPage() {
                             nome={c.sacado}
                             acordo={indice.get(chaveCliente(c.sacado))}
                             anterior={condicaoPraticada(pedidos, c.sacado)}
+                            valorCarteira={c.valor}
                             aoSalvar={(a) =>
                               aplicarAcordo(chaveCliente(c.sacado), a)
                             }
