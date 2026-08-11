@@ -60,6 +60,11 @@ export default function ConfiguracoesPage() {
   const [maximo, setMaximo] = useState<number>(LIMITES_PADRAO.maximo);
   /** A coluna do limite máximo pode não existir ainda no banco. */
   const [semColunaMaximo, setSemColunaMaximo] = useState(false);
+  const [tolerancia, setTolerancia] = useState<number>(LIMITES_PADRAO.tolerancia);
+  const [toleranciaSalva, setToleranciaSalva] = useState<number>(
+    LIMITES_PADRAO.tolerancia
+  );
+  const [semColunaTolerancia, setSemColunaTolerancia] = useState(false);
   const [regra, setRegra] = useState<"venda" | "boleto">("venda");
   const [chatIds, setChatIds] = useState<string[]>([]);
   const [novoChat, setNovoChat] = useState("");
@@ -94,6 +99,9 @@ export default function ConfiguracoesPage() {
           setMaximo(limites.maximo);
           setMaximoSalvo(limites.maximo);
           setSemColunaMaximo(!("limite_maximo_dias" in data));
+          setTolerancia(limites.tolerancia);
+          setToleranciaSalva(limites.tolerancia);
+          setSemColunaTolerancia(!("tolerancia_dias" in data));
           setRegra((data.regra_limite as "venda" | "boleto") ?? "venda");
           setChatIds(
             Array.isArray(data.telegram_chat_ids) ? data.telegram_chat_ids : []
@@ -237,6 +245,8 @@ export default function ConfiguracoesPage() {
       // Só mandamos a coluna nova se ela existir, para não travar o salvamento
       // de todo o resto num banco que ainda não recebeu o ALTER TABLE.
       if (!semColunaMaximo) payload.limite_maximo_dias = max;
+      if (!semColunaTolerancia)
+        payload.tolerancia_dias = Math.max(0, Number(tolerancia) || 0);
 
       let error;
       if (configId) {
@@ -256,6 +266,8 @@ export default function ConfiguracoesPage() {
       if (error) throw error;
       setLimiteSalvo(normal);
       if (!semColunaMaximo) setMaximoSalvo(max);
+      if (!semColunaTolerancia)
+        setToleranciaSalva(Math.max(0, Number(tolerancia) || 0));
       setAviso({ tipo: "ok", texto: "Configurações salvas." });
     } catch (err) {
       console.error(err);
@@ -295,6 +307,11 @@ export default function ConfiguracoesPage() {
               </p>
               <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">
                 até {limite} dias
+                {tolerancia > 0 && (
+                  <span className="block opacity-80">
+                    (aceita até {limite + tolerancia} pela folga)
+                  </span>
+                )}
               </p>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
@@ -302,7 +319,8 @@ export default function ConfiguracoesPage() {
                 ⚠️ Exceção estratégica
               </p>
               <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-                {limite + 1} a {maximo} dias · gera alerta
+                {limite + tolerancia + 1} a {maximo + tolerancia} dias · gera
+                alerta
               </p>
             </div>
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
@@ -310,7 +328,7 @@ export default function ConfiguracoesPage() {
                 🚨 Não permitido
               </p>
               <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">
-                acima de {maximo} dias · alerta crítico
+                acima de {maximo + tolerancia} dias · alerta crítico
               </p>
             </div>
           </div>
@@ -359,6 +377,18 @@ export default function ConfiguracoesPage() {
                 onChange={(e) => setMaximo(parseInt(e.target.value) || 0)}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tolerancia" className="flex items-center gap-1.5">Tolerância (dias)<Ajuda titulo="Tolerância de calendário" texto={AJUDA.tolerancia} /></Label>
+              <Input
+                id="tolerancia"
+                type="number"
+                min={0}
+                className="w-32"
+                disabled={semColunaTolerancia}
+                value={tolerancia}
+                onChange={(e) => setTolerancia(parseInt(e.target.value) || 0)}
+              />
+            </div>
             <div className="flex-1 space-y-1.5">
               <Label className="flex items-center gap-1.5">
                 Aplicar o limite sobre
@@ -398,7 +428,8 @@ export default function ConfiguracoesPage() {
                 aqui para reavaliar o que já está no sistema.
               </p>
               {(Number(limite) !== limiteSalvo ||
-                Number(maximo) !== maximoSalvo) && (
+                Number(maximo) !== maximoSalvo ||
+                Number(tolerancia) !== toleranciaSalva) && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
                   Você mudou a política na tela ({limite}/{maximo} dias), mas o
                   salvo ainda é {limiteSalvo}/{maximoSalvo}. Clique em “Salvar

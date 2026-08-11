@@ -38,6 +38,8 @@ export const AJUDA = {
     "Prazo padrão máximo da política (150 dias). Pedidos cujo ÚLTIMO boleto vence dentro desse prazo são Normais. Acima dele, o pedido vira exceção estratégica ou passa a não ser permitido.",
   limiteMaximo:
     "Teto absoluto da política (180 dias). Entre o prazo padrão e este teto, o pedido é uma exceção estratégica e gera alerta. Acima do teto, o prazo não é permitido e gera alerta crítico.",
+  tolerancia:
+    "Folga para a variação de calendário, não para afrouxar a regra. Uma condição \"5x mensal\" dá 150 a 153 dias corridos dependendo dos meses que atravessa \u2014 só quem entra em fevereiro fecha exatos 150 \u2014 e o vencimento em fim de semana empurra mais 1 ou 2. Sem esta folga, quase toda condição mensal padrão viraria alerta.",
   politicaPrazo:
     "Três faixas, sempre pelo vencimento do ÚLTIMO boleto do pedido: até o prazo padrão = Normal; do padrão até o teto = Exceção estratégica (alerta); acima do teto = Não permitido (alerta crítico).",
   excecoesEstrategicas:

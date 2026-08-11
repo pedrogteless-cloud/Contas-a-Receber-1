@@ -22,9 +22,23 @@ export interface LimitesPrazo {
   normal: number;
   /** Acima daqui o prazo não é permitido. Padrão da política: 180 dias. */
   maximo: number;
+  /**
+   * Folga para a variação de calendário.
+   *
+   * Uma condição "5x mensal" (mesmo dia de cada mês) dá 150 a 153 dias
+   * corridos, dependendo de quais meses ela atravessa — só quem entra em
+   * fevereiro fecha exatos 150. O vencimento que cai em fim de semana e é
+   * empurrado para segunda ainda soma +1 ou +2. Sem esta folga, a regra de
+   * 150 reprovaria quase toda condição mensal padrão.
+   */
+  tolerancia: number;
 }
 
-export const LIMITES_PADRAO: LimitesPrazo = { normal: 150, maximo: 180 };
+export const LIMITES_PADRAO: LimitesPrazo = {
+  normal: 150,
+  maximo: 180,
+  tolerancia: 5,
+};
 
 /**
  * Lê os limites da tabela `configuracoes`, tolerando o formato antigo (só
@@ -32,26 +46,49 @@ export const LIMITES_PADRAO: LimitesPrazo = { normal: 150, maximo: 180 };
  */
 export function lerLimites(
   config:
-    | { limite_prazo_dias?: number | null; limite_maximo_dias?: number | null }
+    | {
+        limite_prazo_dias?: number | null;
+        limite_maximo_dias?: number | null;
+        tolerancia_dias?: number | null;
+      }
     | null
     | undefined
 ): LimitesPrazo {
   const normal = config?.limite_prazo_dias ?? LIMITES_PADRAO.normal;
   const maximo = config?.limite_maximo_dias ?? LIMITES_PADRAO.maximo;
+  const tolerancia = config?.tolerancia_dias ?? LIMITES_PADRAO.tolerancia;
   // Um máximo abaixo do normal deixaria a faixa de exceção vazia e faria todo
   // pedido longo cair direto em "não permitido". Preferimos ignorar o valor.
-  return { normal, maximo: Math.max(maximo, normal) };
+  return {
+    normal,
+    maximo: Math.max(maximo, normal),
+    tolerancia: Math.max(0, tolerancia),
+  };
 }
 
-/** Em que faixa da política esse prazo de recebimento cai. */
+/**
+ * Em que faixa da política esse prazo de recebimento cai.
+ *
+ * As duas fronteiras ganham a tolerância de calendário: 153 dias numa política
+ * de 150 é a MESMA condição comercial, só atravessando meses mais longos.
+ */
 export function classificarPrazo(
   prazo: number | null | undefined,
   limites: LimitesPrazo
 ): StatusPrazo | null {
   if (typeof prazo !== "number") return null;
-  if (prazo <= limites.normal) return "normal";
-  if (prazo <= limites.maximo) return "excecao";
+  if (prazo <= limites.normal + limites.tolerancia) return "normal";
+  if (prazo <= limites.maximo + limites.tolerancia) return "excecao";
   return "nao_permitido";
+}
+
+/** O prazo passou do limite, mas só pela folga de calendário. */
+export function dentroDaTolerancia(
+  prazo: number | null | undefined,
+  limites: LimitesPrazo
+): boolean {
+  if (typeof prazo !== "number") return false;
+  return prazo > limites.normal && prazo <= limites.normal + limites.tolerancia;
 }
 
 export const STATUS: Record<

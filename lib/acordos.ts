@@ -122,7 +122,9 @@ export function avaliarPedido(
   const limiteAplicado =
     combinado != null ? Math.min(combinado, limites.normal) : limites.normal;
 
-  if (prazo > limiteAplicado) {
+  // A mesma folga de calendário vale para o acordo: um "5x mensal" combinado
+  // em 150 chega a 153 sem ninguém ter mudado a condição.
+  if (prazo > limiteAplicado + limites.tolerancia) {
     return {
       status,
       motivo: combinado != null ? "fora_do_acordo" : "excecao",
