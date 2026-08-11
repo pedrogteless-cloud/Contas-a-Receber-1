@@ -151,7 +151,7 @@ export function AcordoCliente({
         </div>
         {lido.prazo != null && (
           <p className="text-[11px] text-muted-foreground">
-            {lido.condicao} · {lido.parcelas}x · último {lido.prazo}d
+            {lido.expandida} · {lido.parcelas}x · último {lido.prazo}d
           </p>
         )}
       </div>

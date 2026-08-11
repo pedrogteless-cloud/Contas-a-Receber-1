@@ -50,7 +50,10 @@ export interface Acordo {
  *   "150"               -> 150                (parcela única)
  */
 export function interpretarCondicao(texto: string): {
+  /** Como se escreve e se lê: "30/150". */
   condicao: string;
+  /** A lista inteira, para conferência: "30/60/90/120/150". */
+  expandida: string;
   prazo: number | null;
   parcelas: number;
 } {
@@ -58,7 +61,8 @@ export function interpretarCondicao(texto: string): {
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0);
 
-  if (numeros.length === 0) return { condicao: "", prazo: null, parcelas: 0 };
+  if (numeros.length === 0)
+    return { condicao: "", expandida: "", prazo: null, parcelas: 0 };
 
   // A notação de faixa: "primeira/última", com o passo igual à primeira.
   if (numeros.length === 2) {
@@ -69,7 +73,8 @@ export function interpretarCondicao(texto: string): {
     if (cabe && qtd >= 2 && qtd <= 24) {
       const lista = Array.from({ length: qtd }, (_, i) => passo * (i + 1));
       return {
-        condicao: lista.join("/"),
+        condicao: `${passo}/${ultima}`,
+        expandida: lista.join("/"),
         prazo: ultima,
         parcelas: qtd,
       };
@@ -78,10 +83,34 @@ export function interpretarCondicao(texto: string): {
 
   const ordenados = [...numeros].sort((a, b) => a - b);
   return {
-    condicao: ordenados.join("/"),
+    condicao: resumirCondicao(ordenados),
+    expandida: ordenados.join("/"),
     prazo: ordenados[ordenados.length - 1],
     parcelas: ordenados.length,
   };
+}
+
+/**
+ * Escreve uma lista de prazos no formato curto do comércio: "30/240".
+ *
+ * Só encurta quando as parcelas são regulares e o intervalo bate com a
+ * primeira — que é o caso de todo parcelamento mensal. Repare que os prazos
+ * REAIS vêm do calendário (30/61/91/122/153, não 30/60/90/120/150), então a
+ * regularidade é medida com folga de alguns dias. Condições irregulares são
+ * mostradas por extenso, porque encurtá-las esconderia informação.
+ */
+export function resumirCondicao(prazos: number[]): string {
+  const l = [...prazos].filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  if (l.length === 0) return "";
+  if (l.length <= 2) return l.join("/");
+
+  const intervalos = l.slice(1).map((v, i) => v - l[i]);
+  const regular = intervalos.every((g) => Math.abs(g - intervalos[0]) <= 5);
+  const comecaNoIntervalo = Math.abs(intervalos[0] - l[0]) <= 5;
+
+  return regular && comecaNoIntervalo
+    ? `${l[0]}/${l[l.length - 1]}`
+    : l.join("/");
 }
 
 /**
@@ -208,9 +237,9 @@ export function condicaoPraticada(
   if (doCliente.length === 0) return { condicao: null, prazo: null };
 
   const pior = doCliente.reduce((a, b) => ((b.prazo ?? 0) > (a.prazo ?? 0) ? b : a));
-  const prazos = [...pior.prazosParcelas].sort((a, b) => a - b);
+  const resumo = resumirCondicao(pior.prazosParcelas);
   return {
-    condicao: prazos.length > 0 ? prazos.join("/") : null,
+    condicao: resumo || null,
     prazo: pior.prazo ?? null,
   };
 }
