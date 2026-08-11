@@ -65,7 +65,7 @@ export async function POST(req: Request) {
 
   const ganho = antes - depois;
   const linhas = [
-    "🎉 Prazo reduzido com cliente",
+    "🎉 Redução do prazo médio concedido",
     "",
     `👤 ${cliente}`,
     `📉 ${body?.condicaoAnterior ?? `${antes}d`} → ${
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     linhas.push(`💰 Carteira do cliente: ${moedaCurta(body.valorCarteira)}`);
   }
 
-  linhas.push("", `🤝 Negociado por ${s.nome}`);
+  linhas.push("", `📝 Acordo registrado pelo usuário: ${s.nome}`);
   const texto = linhas.join("\n");
 
   let enviados = 0;
