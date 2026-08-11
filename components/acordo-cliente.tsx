@@ -1,10 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { BellOff, Check, Handshake, Loader2, X } from "lucide-react";
+import { ArrowRight, BellOff, Check, Handshake, Loader2, X } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
-import { chaveCliente, type Acordo } from "@/lib/acordos";
+import {
+  chaveCliente,
+  interpretarCondicao,
+  type Acordo,
+} from "@/lib/acordos";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,15 +23,19 @@ import { Input } from "@/components/ui/input";
 export function AcordoCliente({
   nome,
   acordo,
+  anterior,
   aoSalvar,
 }: {
   nome: string;
   acordo: Acordo | undefined;
+  /** O que o cliente praticava — o sistema descobre e grava como "antes". */
+  anterior: { condicao: string | null; prazo: number | null };
   aoSalvar: (a: Acordo | null) => void;
 }) {
   const [editando, setEditando] = useState(false);
-  const [prazo, setPrazo] = useState<string>(
-    acordo?.prazo_acordado != null ? String(acordo.prazo_acordado) : ""
+  const [condicao, setCondicao] = useState<string>(
+    acordo?.condicao_acordada ??
+      (acordo?.prazo_acordado != null ? String(acordo.prazo_acordado) : "")
   );
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -42,6 +50,11 @@ export function AcordoCliente({
         cliente_chave: chave,
         cliente_nome: nome,
         prazo_acordado: acordo?.prazo_acordado ?? null,
+        condicao_acordada: acordo?.condicao_acordada ?? null,
+        // O "antes" é um retrato: gravado uma vez, na criação do acordo, para
+        // não mudar depois nem sumir quando o histórico for limpo.
+        condicao_anterior: acordo?.condicao_anterior ?? anterior.condicao,
+        prazo_anterior: acordo?.prazo_anterior ?? anterior.prazo,
         sem_alerta: acordo?.sem_alerta ?? false,
         // Só reinicia a validade quando o acordo é criado; editar depois não
         // deve fazer o sistema esquecer o que já foi cobrado.
@@ -76,7 +89,7 @@ export function AcordoCliente({
         .eq("cliente_chave", chave);
       if (error) throw error;
       aoSalvar(null);
-      setPrazo("");
+      setCondicao("");
       setEditando(false);
     } catch (err) {
       console.error(err);
@@ -90,16 +103,16 @@ export function AcordoCliente({
     return (
       <div className="flex items-center justify-end gap-1">
         <Input
-          type="number"
-          min={1}
           autoFocus
-          className="h-8 w-20 text-right"
-          placeholder="150"
-          value={prazo}
-          onChange={(e) => setPrazo(e.target.value)}
+          className="h-8 w-28 text-right"
+          placeholder="30/150"
+          title="A condição combinada, como você fala com o cliente: 30/150"
+          value={condicao}
+          onChange={(e) => setCondicao(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              gravar({ prazo_acordado: parseInt(prazo) || null });
+              const { condicao: c, prazo: pr } = interpretarCondicao(condicao);
+              gravar({ condicao_acordada: c || null, prazo_acordado: pr });
             }
             if (e.key === "Escape") setEditando(false);
           }}
@@ -110,7 +123,10 @@ export function AcordoCliente({
           className="h-8 w-8"
           disabled={salvando}
           title="Salvar acordo"
-          onClick={() => gravar({ prazo_acordado: parseInt(prazo) || null })}
+          onClick={() => {
+            const { condicao: c, prazo: pr } = interpretarCondicao(condicao);
+            gravar({ condicao_acordada: c || null, prazo_acordado: pr });
+          }}
         >
           {salvando ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -139,11 +155,23 @@ export function AcordoCliente({
         <button
           type="button"
           onClick={() => setEditando(true)}
-          className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/20"
-          title="Prazo combinado com este cliente — clique para alterar"
+          className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/20"
+          title={`Antes: ${acordo.condicao_anterior ?? "—"} (${
+            acordo.prazo_anterior ?? "—"
+          }d) · Agora: ${
+            acordo.condicao_acordada ?? acordo.prazo_acordado
+          } (${acordo.prazo_acordado}d). Clique para alterar.`}
         >
-          <Handshake className="h-3 w-3" />
-          {acordo.prazo_acordado}d
+          <Handshake className="h-3 w-3 shrink-0" />
+          {acordo.condicao_anterior && (
+            <>
+              <span className="font-normal text-muted-foreground line-through">
+                {acordo.condicao_anterior}
+              </span>
+              <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+            </>
+          )}
+          <span>{acordo.condicao_acordada ?? `${acordo.prazo_acordado}d`}</span>
         </button>
       ) : (
         <button

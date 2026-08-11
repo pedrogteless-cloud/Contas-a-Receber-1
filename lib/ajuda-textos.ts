@@ -45,7 +45,7 @@ export const AJUDA = {
   excecoesEstrategicas:
     "Pedidos com prazo entre o padrão e o teto da política. Não são proibidos, mas precisam de decisão consciente — por isso aparecem no alerta com cliente, pedido, valor, condição de pagamento e último vencimento.",
   acordoCliente:
-    "Prazo combinado com aquele cliente, valendo daqui para frente. Se um pedido novo passar do acordo, o alerta diz que ele saiu do combinado. O sino cortado marca \u201cestou ciente\u201d: o cliente para de gerar alerta \u2014 mas pedidos acima do teto da pol\u00edtica continuam avisando, porque n\u00e3o permitido n\u00e3o se desliga.",
+    "O que foi combinado com aquele cliente, valendo daqui para frente. Escreva a condição como você fala com ele \u2014 \"30/150\" \u2014 e o sistema cobra o último vencimento (150). O \"antes\" ao lado é preenchido sozinho, a partir do pior pedido que o cliente vinha praticando. O sino cortado marca \u201cestou ciente\u201d: o cliente para de gerar alerta, mas pedidos acima do teto da política continuam avisando.",
   naoPermitidos:
     "Pedidos com prazo acima do teto da política. Fogem da regra e geram alerta crítico, em mensagem separada para não se perderem no meio das exceções.",
   acimaLimite:

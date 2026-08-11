@@ -21,12 +21,38 @@ export interface Acordo {
   cliente_nome: string;
   /** Prazo combinado com o cliente daqui para frente. */
   prazo_acordado: number | null;
+  /** A condição como foi conversada: "30/150". */
+  condicao_acordada?: string | null;
+  /** Retrato do que o cliente praticava ANTES — preenchido pelo sistema. */
+  condicao_anterior?: string | null;
+  prazo_anterior?: number | null;
   /** "Já estou ciente que este cliente vai passar do padrão." */
   sem_alerta: boolean;
   observacao?: string | null;
   /** Desde quando vale. Pedidos emitidos ANTES disso não são cobrados. */
   acordado_em: string;
   registrado_por?: string | null;
+}
+
+/**
+ * Lê uma condição de pagamento escrita à mão: "30/150", "30 60 90", "150".
+ *
+ * O prazo que a política cobra é o do ÚLTIMO vencimento, então guardamos o
+ * maior número — mas preservamos o texto inteiro, porque é assim que a
+ * condição foi combinada com o cliente.
+ */
+export function interpretarCondicao(texto: string): {
+  condicao: string;
+  prazo: number | null;
+} {
+  const numeros = (texto.match(/\d+/g) ?? [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (numeros.length === 0) return { condicao: "", prazo: null };
+  return {
+    condicao: numeros.join("/"),
+    prazo: Math.max(...numeros),
+  };
 }
 
 /**
@@ -134,6 +160,30 @@ export function avaliarPedido(
   }
 
   return { status, motivo: "dentro", alertar: false, limiteAplicado };
+}
+
+/**
+ * Descobre, sozinho, a condição que um cliente vinha praticando.
+ *
+ * Pega o pedido de MAIOR prazo de recebimento — é ele que motiva a conversa —
+ * e devolve a condição dele. Serve para preencher o "antes" do acordo sem que
+ * ninguém precise digitar, e vira um retrato: fica gravado no acordo, então
+ * sobrevive à limpeza do histórico.
+ */
+export function condicaoPraticada(
+  pedidos: { sacado: string; prazo: number | null; prazosParcelas: number[] }[],
+  nome: string
+): { condicao: string | null; prazo: number | null } {
+  const chave = chaveCliente(nome);
+  const doCliente = pedidos.filter((p) => chaveCliente(p.sacado) === chave);
+  if (doCliente.length === 0) return { condicao: null, prazo: null };
+
+  const pior = doCliente.reduce((a, b) => ((b.prazo ?? 0) > (a.prazo ?? 0) ? b : a));
+  const prazos = [...pior.prazosParcelas].sort((a, b) => a - b);
+  return {
+    condicao: prazos.length > 0 ? prazos.join("/") : null,
+    prazo: pior.prazo ?? null,
+  };
 }
 
 /** Indexa os acordos por chave de cliente, para consulta rápida. */

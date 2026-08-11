@@ -28,13 +28,19 @@ import {
   valorTotal,
 } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
-import { chaveCliente, indexarAcordos, type Acordo } from "@/lib/acordos";
-import { AcordoCliente } from "@/components/acordo-cliente";
+import {
+  chaveCliente,
+  condicaoPraticada,
+  indexarAcordos,
+  type Acordo,
+} from "@/lib/acordos";
 import {
   LIMITES_PADRAO,
+  agruparPedidos,
   lerLimites,
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
+import { AcordoCliente } from "@/components/acordo-cliente";
 import { CHART, corEmpresa } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
@@ -87,6 +93,9 @@ export default function ClientesPage() {
   const [carregando, setCarregando] = useState(true);
   const [acordos, setAcordos] = useState<Acordo[]>([]);
   const indice = useMemo(() => indexarAcordos(acordos), [acordos]);
+  // Base para o "antes" do acordo: o sistema descobre sozinho a condição que
+  // cada cliente vinha praticando, sem ninguém digitar.
+  const pedidos = useMemo(() => agruparPedidos(boletos), [boletos]);
 
   /** Insere, atualiza ou remove um acordo sem recarregar a página inteira. */
   function aplicarAcordo(chave: string, a: Acordo | null) {
@@ -414,6 +423,7 @@ export default function ClientesPage() {
                           <AcordoCliente
                             nome={c.sacado}
                             acordo={indice.get(chaveCliente(c.sacado))}
+                            anterior={condicaoPraticada(pedidos, c.sacado)}
                             aoSalvar={(a) =>
                               aplicarAcordo(chaveCliente(c.sacado), a)
                             }
