@@ -53,6 +53,7 @@ import {
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
 import { dataPorExtenso, diasAte, hojeISO } from "@/lib/tempo";
+import { separarPorVencimento } from "@/lib/arquivo";
 import { CHART, corEmpresa, formatarCompacto } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
@@ -113,7 +114,7 @@ export default function DashboardPage() {
         .limit(1)
         .maybeSingle(),
     ]).then(([b, c]) => {
-      setBoletos((b.data ?? []) as Boleto[]);
+      setBoletos(separarPorVencimento((b.data ?? []) as Boleto[]).ativos);
       setLimites(lerLimites(c.data));
       setCarregando(false);
     });

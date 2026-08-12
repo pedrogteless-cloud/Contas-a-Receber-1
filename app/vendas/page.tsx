@@ -19,6 +19,7 @@ import {
   lerLimites,
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
+import { separarPorVencimento } from "@/lib/arquivo";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
@@ -79,7 +80,7 @@ export default function VendasPage() {
         .limit(1)
         .maybeSingle(),
     ]).then(([b, c]) => {
-      setBoletos((b.data ?? []) as Boleto[]);
+      setBoletos(separarPorVencimento((b.data ?? []) as Boleto[]).ativos);
       setLimites(lerLimites(c.data));
       setCarregando(false);
     });

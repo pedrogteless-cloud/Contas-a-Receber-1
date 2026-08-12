@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { prazoMedioPonderado, valorTotal } from "@/lib/analytics";
-import { abreviarNome, type Boleto } from "@/lib/boletos";
+import { type Boleto } from "@/lib/boletos";
 import {
   agruparPedidos,
   desvioDaMeta,
@@ -12,7 +12,12 @@ import {
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
 import { dataCurtaISO, hojeBrasilia } from "@/lib/tempo";
-import { diasCurto, moedaCurta } from "@/lib/telegram-formato";
+import {
+  SEPARADOR,
+  diasCurto,
+  moedaCurta,
+  nomeCompleto,
+} from "@/lib/telegram-formato";
 import {
   LIMIAR_CONCENTRACAO,
   lerNotificacoes,
@@ -42,10 +47,19 @@ function autorizado(req: Request): boolean {
   return Boolean(sessaoAtual());
 }
 
+/** Abre um bloco novo: linha em branco, separador tracejado, título. */
+function abrirBloco(linhas: string[], titulo: string) {
+  linhas.push("", SEPARADOR, "", titulo);
+}
+
 /**
  * O fechamento é sobre O DIA: o que foi emitido, que prazo foi concedido e
- * quais pedidos saíram da política. A carteira inteira entra só como uma linha
- * de contexto no rodapé.
+ * quais pedidos saíram da política. A carteira inteira entra por último, como
+ * pano de fundo.
+ *
+ * Escrito em blocos separados por linha tracejada, cada um com uma frase
+ * dizendo do que se trata — a mensagem é lida rápido, no celular, por gente
+ * que não abriu o sistema hoje.
  */
 function montarResumo(
   boletos: Boleto[],
@@ -57,27 +71,37 @@ function montarResumo(
   const pedidosDoDia = agruparPedidos(doDia);
   const ind = indicadoresPolitica(pedidosDoDia, limites);
 
-  const linhas: string[] = [`📊 Fechamento do dia · ${dataCurtaISO(hoje)}`, ""];
+  const linhas: string[] = [
+    `📊 Fechamento do dia · ${dataCurtaISO(hoje)}`,
+    "",
+    "Veja o que foi emitido hoje e como estamos em relação à meta de prazo médio concedido.",
+  ];
 
   if (doDia.length === 0) {
+    abrirBloco(linhas, "📥 O que entrou hoje");
     linhas.push(
       notificacaoAtiva(avisos, "dia_sem_importacao")
         ? "😴 Nenhum boleto foi importado hoje.\nSe houve emissão, o relatório do banco ainda não subiu no sistema."
-        : "Nenhum boleto emitido hoje."
+        : "Nenhum boleto foi emitido hoje."
     );
   } else {
     const prazoDoDia = prazoMedioPonderado(doDia);
     const desvio = desvioDaMeta(prazoDoDia, limites.meta);
 
+    abrirBloco(linhas, "📥 O que entrou hoje");
     linhas.push(
-      `📥 ${pedidosDoDia.length} pedido${
+      `${pedidosDoDia.length} pedido${
         pedidosDoDia.length > 1 ? "s" : ""
       } · ${doDia.length} boleto${doDia.length > 1 ? "s" : ""} · ${moedaCurta(
         valorTotal(doDia)
-      )}`,
+      )} no total`,
+      "",
       `${desvio?.emoji ?? "⏳"} Prazo médio concedido hoje: ${
-        prazoDoDia != null ? `${diasCurto(prazoDoDia)}d` : "—"
-      }${desvio ? ` · ${desvio.texto} (${limites.meta}d)` : ""}`
+        prazoDoDia != null ? `${diasCurto(prazoDoDia)} dias` : "—"
+      }`,
+      desvio
+        ? `${desvio.texto} — a meta é ${limites.meta} dias`
+        : `A meta é ${limites.meta} dias`
     );
 
     if (
@@ -85,73 +109,90 @@ function montarResumo(
       !desvio.acimaDaMeta &&
       notificacaoAtiva(avisos, "meta_do_dia")
     ) {
+      abrirBloco(linhas, "🎯 Meta do dia batida");
       linhas.push(
-        "",
-        "🎯 META DO DIA BATIDA",
-        `Prazo médio concedido hoje: ${diasCurto(prazoDoDia!)}d — ${
-          desvio.texto
-        } de ${limites.meta}d.`
+        `O prazo médio concedido hoje ficou dentro da meta de ${limites.meta} dias — ${desvio.texto}.`
       );
     }
-    linhas.push("");
 
+    abrirBloco(linhas, `📐 Pedidos fora da política de ${limites.normal} dias`);
+    linhas.push(
+      "Contando pelo vencimento da última parcela de cada pedido:",
+      ""
+    );
     if (ind.acimaDoNormal.quantidade === 0) {
-      linhas.push(`✅ Nenhum pedido acima de ${limites.normal} dias.`);
+      linhas.push(
+        `✅ Nenhum pedido passou de ${limites.normal} dias hoje.`
+      );
     } else {
       linhas.push(
-        `Último vencimento acima de ${limites.normal} dias: ${
-          ind.acimaDoNormal.quantidade
-        } · ${moedaCurta(ind.acimaDoNormal.valor)}`,
-        `  ⚠️ Exceções estratégicas (${limites.normal + 1}–${
+        `${ind.acimaDoNormal.quantidade} pedido${
+          ind.acimaDoNormal.quantidade > 1 ? "s" : ""
+        } passou${
+          ind.acimaDoNormal.quantidade > 1 ? "ram" : ""
+        } de ${limites.normal} dias · ${moedaCurta(ind.acimaDoNormal.valor)}`,
+        `  ⚠️ ${ind.excecoes.quantidade} ${
+          ind.excecoes.quantidade === 1 ? "é" : "são"
+        } exceção estratégica (${limites.normal + 1} a ${
           limites.maximo
-        }d): ${ind.excecoes.quantidade} · ${moedaCurta(ind.excecoes.valor)}`,
-        `  🚨 Acima de ${limites.maximo}d: ${
-          ind.naoPermitidos.quantidade
-        } · ${moedaCurta(ind.naoPermitidos.valor)}`
+        } dias) · ${moedaCurta(ind.excecoes.valor)}`,
+        `  🚨 ${ind.naoPermitidos.quantidade} est${
+          ind.naoPermitidos.quantidade === 1 ? "á" : "ão"
+        } acima de ${
+          limites.maximo
+        } dias, o que não é permitido · ${moedaCurta(ind.naoPermitidos.valor)}`
       );
     }
 
     // Quem puxou a média para cima hoje — é aqui que o trabalho continua.
     const porCliente = clientesDoDia(doDia, limites);
     const acimaDaMeta = porCliente.filter((c) => c.desvio?.acimaDaMeta);
-    if (acimaDaMeta.length > 0) {
-      linhas.push("", "🔺 Clientes acima da meta hoje");
-      for (const c of acimaDaMeta.slice(0, 5)) {
+    const dentro = porCliente.filter((c) => c.desvio && !c.desvio.acimaDaMeta);
+    if (acimaDaMeta.length > 0 || dentro.length > 0) {
+      abrirBloco(linhas, "👥 Quem puxou a média para cima hoje");
+      if (acimaDaMeta.length > 0) {
         linhas.push(
-          `• ${c.nome} · ${diasCurto(c.prazo)}d · ${c.desvio!.texto}`
+          `Estes clientes emitiram boleto hoje com prazo acima da meta de ${limites.meta} dias:`,
+          ""
+        );
+        for (const c of acimaDaMeta.slice(0, 5)) {
+          linhas.push(
+            `• ${c.nome} · ${diasCurto(c.prazo)} dias · ${c.desvio!.texto}`
+          );
+        }
+      } else {
+        linhas.push("Nenhum cliente ficou acima da meta hoje. 🎉");
+      }
+      if (dentro.length > 0) {
+        linhas.push(
+          "",
+          `✅ ${dentro.length} cliente${
+            dentro.length > 1 ? "s" : ""
+          } ficou${dentro.length > 1 ? "ram" : ""} dentro da meta hoje.`
         );
       }
-    }
-    const dentro = porCliente.filter((c) => c.desvio && !c.desvio.acimaDaMeta);
-    if (dentro.length > 0) {
-      linhas.push(
-        "",
-        `✅ ${dentro.length} cliente${
-          dentro.length > 1 ? "s" : ""
-        } dentro da meta hoje.`
-      );
     }
   }
 
   // A carteira inteira, também contra a meta.
   const pmr = prazoMedioPonderado(boletos);
   const desvioCarteira = desvioDaMeta(pmr, limites.meta);
+  abrirBloco(linhas, "📦 Carteira inteira (todos os boletos ativos)");
   linhas.push(
-    "",
-    `📦 Carteira: prazo médio concedido ${
-      pmr != null ? `${diasCurto(pmr)}d` : "—"
-    }${desvioCarteira ? ` · ${desvioCarteira.texto}` : ""}`
+    `Prazo médio concedido: ${pmr != null ? `${diasCurto(pmr)} dias` : "—"}`
   );
+  if (desvioCarteira) {
+    linhas.push(`${desvioCarteira.texto} — a meta é ${limites.meta} dias`);
+  }
 
   if (notificacaoAtiva(avisos, "concentracao_cliente")) {
     const concentrado = maiorConcentracao(boletos);
     if (concentrado && concentrado.fatia >= LIMIAR_CONCENTRACAO) {
+      abrirBloco(linhas, "📈 Concentração de carteira");
       linhas.push(
-        "",
-        "📈 Concentração de carteira",
-        `${concentrado.nome} representa ${Math.round(
+        `${concentrado.nome} responde por ${Math.round(
           concentrado.fatia * 100
-        )}% do total a receber (${moedaCurta(concentrado.valor)}).`
+        )}% de tudo que há a receber (${moedaCurta(concentrado.valor)}).`
       );
     }
   }
@@ -177,7 +218,7 @@ function maiorConcentracao(
     if (!melhor || valor > melhor.valor) melhor = { nome, valor };
   }
   return melhor
-    ? { nome: abreviarNome(melhor.nome), valor: melhor.valor, fatia: melhor.valor / total }
+    ? { nome: nomeCompleto(melhor.nome), valor: melhor.valor, fatia: melhor.valor / total }
     : null;
 }
 
@@ -197,7 +238,7 @@ function clientesDoDia(
     .map(([nome, lista]) => {
       const prazo = prazoMedioPonderado(lista);
       return {
-        nome: abreviarNome(nome),
+        nome: nomeCompleto(nome),
         prazo: prazo ?? 0,
         desvio: desvioDaMeta(prazo, limites.meta),
       };

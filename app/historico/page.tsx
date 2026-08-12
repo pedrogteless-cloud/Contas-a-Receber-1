@@ -23,6 +23,7 @@ import {
 import { prazoMedio } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
 import { descreverPrazo, hojeISO, situacaoVencimento } from "@/lib/tempo";
+import { separarPorVencimento } from "@/lib/arquivo";
 import { corEmpresa } from "@/lib/theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";

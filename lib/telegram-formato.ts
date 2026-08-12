@@ -8,7 +8,6 @@
 // cliente, pedido, valor, condição de pagamento e último vencimento.
 // ---------------------------------------------------------------------------
 
-import { abreviarNome } from "./boletos";
 import { condicaoPagamento, type DesvioMeta, type Pedido } from "./politica-prazo";
 
 /** "Ley Móveis" → "Móveis". O grupo já sabe de que empresa se trata. */
@@ -17,6 +16,21 @@ export function empresaCurta(nome: string | null | undefined): string {
   if (!n) return "—";
   return n.replace(/^ley\s+/i, "");
 }
+
+/**
+ * O nome do cliente por extenso, só limpando espaço duplicado.
+ *
+ * As mensagens usavam a versão abreviada (2 primeiras palavras), pensada
+ * para telas com pouco espaço. No Telegram isso confundia mais do que
+ * ajudava — "A M" sozinho não diz quem é o cliente.
+ */
+export function nomeCompleto(nome: string | null | undefined): string {
+  const limpo = (nome ?? "").trim().replace(/\s+/g, " ");
+  return limpo || "—";
+}
+
+/** Linha tracejada para separar blocos de assunto numa mensagem longa. */
+export const SEPARADOR = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈";
 
 /** "R$ 10.000" — sem centavos, que só atrapalham a leitura rápida. */
 export function moedaCurta(valor: number): string {
@@ -44,7 +58,7 @@ export function linhaPedido(
   posicao?: { prazoCliente: number | null; desvio: DesvioMeta | null; meta: number }
 ): string {
   const linhas = [
-    `• ${abreviarNome(p.sacado)} · ${empresaCurta(p.empresa)}`,
+    `• ${nomeCompleto(p.sacado)} · ${empresaCurta(p.empresa)}`,
     `  Pedido ${p.documento} · ${moedaCurta(p.valorTotal)}`,
     `  Condição: ${condicaoPagamento(p.prazosParcelas)}`,
     `  Último venc.: ${vencimentoCurto(p.ultimoVencimento)} · ${

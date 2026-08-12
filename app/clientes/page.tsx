@@ -42,6 +42,7 @@ import {
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
 import { AcordoCliente } from "@/components/acordo-cliente";
+import { separarPorVencimento } from "@/lib/arquivo";
 import { CHART, corEmpresa } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
 import { useTheme } from "@/lib/use-theme";
@@ -120,7 +121,7 @@ export default function ClientesPage() {
         .maybeSingle(),
       supabase.from("acordos_prazo").select("*"),
     ]).then(([b, c, a]) => {
-      setBoletos((b.data ?? []) as Boleto[]);
+      setBoletos(separarPorVencimento((b.data ?? []) as Boleto[]).ativos);
       setLimites(lerLimites(c.data));
       setAcordos((a.data ?? []) as Acordo[]);
       setCarregando(false);

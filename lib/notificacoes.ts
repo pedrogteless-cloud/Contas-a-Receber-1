@@ -56,11 +56,11 @@ export const NOTIFICACOES: DefinicaoNotificacao[] = [
     exemplo: `🚨 1 pedido ACIMA DE 180 DIAS · R$ 95.000
 Prazo não permitido pela política.
 
-• CARLOS EDUARDO · Móveis
+• Carlos Eduardo Souza Lima · Móveis
   Pedido 998877 · R$ 95.000
   Condição: 30/240
-  Último venc.: 08/03 · 210d
-  🔺 Cliente em 120d · 33,3% acima da meta (90d)`,
+  Último venc.: 08/03 · 210 dias
+  🔺 Cliente em 120 dias · 33,3% acima da meta (90d)`,
   },
   {
     chave: "politica_excecao",
@@ -74,11 +74,11 @@ Prazo não permitido pela política.
     exemplo: `⚠️ 3 exceções estratégicas · R$ 225.000
 Prazo de recebimento entre 151 e 180 dias.
 
-• FERNANDA DUARTE · Móveis
+• Fernanda Duarte de Oliveira · Móveis
   Pedido 442415 · R$ 120.000
   Condição: 33/66/99/132/165
-  Último venc.: 22/01 · 165d
-  🔺 Cliente em 99d · 10% acima da meta (90d)`,
+  Último venc.: 22/01 · 165 dias
+  🔺 Cliente em 99 dias · 10% acima da meta (90d)`,
   },
   {
     chave: "acordo_descumprido",
@@ -92,11 +92,11 @@ Prazo de recebimento entre 151 e 180 dias.
     exemplo: `🤝 1 pedido FORA DO ACORDO · R$ 42.000
 Estes clientes já tinham prazo combinado — e o pedido passou dele.
 
-• F G LOPES · Colchões
+• F G Lopes de Freitas Maia · Colchões
   Pedido 54120 · R$ 42.000
   Condição: 30/180
-  Último venc.: 10/02 · 180d
-  🔺 Cliente em 139,3d · 54,8% acima da meta (90d)`,
+  Último venc.: 10/02 · 180 dias
+  🔺 Cliente em 139,3 dias · 54,8% acima da meta (90d)`,
   },
   {
     chave: "acordo_reducao",
@@ -127,15 +127,30 @@ Estes clientes já tinham prazo combinado — e o pedido passou dele.
     padrao: true,
     exemplo: `📊 Fechamento do dia · seg, 10 ago
 
-📥 4 pedidos · 18 boletos · R$ 248.997
-🔺 Prazo médio concedido hoje: 102,5d · 13,9% acima da meta (90d)
+Veja o que foi emitido hoje e como estamos em relação à meta de prazo médio concedido.
 
-🔺 Clientes acima da meta hoje
-• CARLOS EDUARDO · 120d · 33,3% acima da meta
+┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
 
-✅ 2 clientes dentro da meta hoje.
+📥 O que entrou hoje
+4 pedidos · 18 boletos · R$ 248.997 no total
 
-📦 Carteira: prazo médio concedido 102,5d · 13,9% acima da meta`,
+🔺 Prazo médio concedido hoje: 102,5 dias
+13,9% acima da meta — a meta é 90 dias
+
+┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
+
+👥 Quem puxou a média para cima hoje
+Estes clientes emitiram boleto hoje com prazo acima da meta de 90 dias:
+
+• Carlos Eduardo Souza Lima · 120 dias · 33,3% acima da meta
+
+✅ 2 clientes ficaram dentro da meta hoje.
+
+┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
+
+📦 Carteira inteira (todos os boletos ativos)
+Prazo médio concedido: 102,5 dias
+13,9% acima da meta — a meta é 90 dias`,
   },
   {
     chave: "meta_do_dia",
@@ -146,8 +161,8 @@ Estes clientes já tinham prazo combinado — e o pedido passou dele.
     momento: "fechamento",
     emoji: "🎯",
     padrao: true,
-    exemplo: `🎯 META DO DIA BATIDA
-Prazo médio concedido hoje: 84,2d — 6,4% melhor que a meta de 90d.`,
+    exemplo: `🎯 Meta do dia batida
+O prazo médio concedido hoje ficou dentro da meta de 90 dias — 6,4% melhor que a meta.`,
   },
   {
     chave: "dia_sem_importacao",
