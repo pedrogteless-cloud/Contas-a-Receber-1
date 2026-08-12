@@ -174,7 +174,15 @@ export default function DashboardPage() {
   // Política de prazo: avaliada por PEDIDO, pelo vencimento do último boleto.
   const pedidos = useMemo(() => agruparPedidos(dados), [dados]);
   const politica = useMemo(
-    () => indicadoresPolitica(pedidos, limites),
+    () =>
+      indicadoresPolitica(
+        pedidos.map((p) => ({
+          prazo: p.prazo,
+          valorTotal: p.valorTotal,
+          media: prazoMedioPonderado(p.boletos),
+        })),
+        limites
+      ),
     [pedidos, limites]
   );
 
@@ -319,30 +327,20 @@ export default function DashboardPage() {
               <Ajuda titulo="Política de prazo" texto={AJUDA.politicaPrazo} />
             </CardTitle>
             <CardDescription>
-              Por pedido, pelo vencimento do último boleto · normal até{" "}
-              {limites.normal} dias, teto de {limites.maximo}
+              Fora do padrão = prazo médio acima da meta de {limites.meta} dias
+              · teto duro de {limites.maximo} dias no último vencimento
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-3">
+          <CardContent className="grid gap-4 sm:grid-cols-2">
             <StatCard
-              label={`Último venc. acima de ${limites.normal} dias`}
-              value={String(politica.acimaDoNormal.quantidade)}
-              hint={`${formatarMoeda(politica.acimaDoNormal.valor)} · ${
+              label="Pedidos fora do padrão"
+              value={String(politica.foraDoPadrao.quantidade)}
+              hint={`${formatarMoeda(politica.foraDoPadrao.valor)} · ${
                 pedidos.length
               } pedido(s) no recorte`}
-              icon={AlertTriangle}
-              tom={politica.acimaDoNormal.quantidade > 0 ? "warning" : "success"}
-              ajuda={AJUDA.acimaLimite}
-            />
-            <StatCard
-              label={`Exceções estratégicas (${limites.normal + 1}–${
-                limites.maximo
-              }d)`}
-              value={String(politica.excecoes.quantidade)}
-              hint={formatarMoeda(politica.excecoes.valor)}
               icon={ShieldAlert}
-              tom={politica.excecoes.quantidade > 0 ? "warning" : "success"}
-              ajuda={AJUDA.excecoesEstrategicas}
+              tom={politica.foraDoPadrao.quantidade > 0 ? "danger" : "success"}
+              ajuda={AJUDA.foraDoPadrao}
             />
             <StatCard
               label={`Acima de ${limites.maximo} dias`}

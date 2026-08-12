@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import type { LimitesPrazo, StatusPrazo } from "./politica-prazo";
-import { classificarPrazo } from "./politica-prazo";
+import { classificarPedido, mediaDaCondicao } from "./politica-prazo";
 
 export interface Acordo {
   id?: string;
@@ -134,7 +134,7 @@ export function chaveCliente(nome: string | null | undefined): string {
 export type MotivoAlerta =
   | "nao_permitido" // acima do teto da política — sempre avisa
   | "fora_do_acordo" // passou do que foi combinado com o cliente
-  | "excecao" // passou do padrão, sem acordo registrado
+  | "fora_do_padrao" // fugiu da meta, sem acordo registrado
   | "silenciado" // cliente marcado como "estou ciente"
   | "dentro"; // nada a avisar
 
@@ -143,33 +143,51 @@ export interface Avaliacao {
   motivo: MotivoAlerta;
   /** Se entra nos alertas do Telegram. */
   alertar: boolean;
-  /** O limite que valeu para este cliente, para explicar na mensagem. */
-  limiteAplicado: number;
+  /**
+   * A meta de prazo médio que valeu para este cliente, para explicar na
+   * mensagem. É a da política, ou a do acordo quando ele for mais rígido.
+   */
+  metaAplicada: number;
+  /** O teto em dias — regra dura, igual para todos. */
+  tetoAplicado: number;
 }
 
 /**
  * Decide o que fazer com um pedido, considerando o acordo do cliente.
+ *
+ * O gatilho é o desvio da META de prazo médio concedido — não o vencimento da
+ * última parcela. Quando a média não vem calculada, ela é derivada da condição
+ * padrão, que é exata para parcelamento mensal.
  *
  * Regras, nesta ordem:
  *  1. acima do teto da política  -> alerta crítico SEMPRE, mesmo silenciado.
  *     "Não permitido" não pode ser desligado por engano.
  *  2. cliente marcado "estou ciente" -> não alerta (só aparece na tela).
  *  3. tem acordo -> vale o acordo, quando ele for mais rígido que o padrão.
- *  4. sem acordo -> vale o padrão da política.
+ *  4. sem acordo -> vale a meta da política.
  */
 export function avaliarPedido(
   prazo: number | null | undefined,
   acordo: Acordo | undefined,
   limites: LimitesPrazo,
-  dataImportacao?: string | null
+  dataImportacao?: string | null,
+  mediaPedido?: number | null
 ): Avaliacao {
-  const status = classificarPrazo(prazo, limites);
+  const media =
+    typeof mediaPedido === "number"
+      ? mediaPedido
+      : typeof prazo === "number"
+        ? mediaDaCondicao(limites.primeiraParcela, prazo)
+        : null;
+
+  const status = classificarPedido(media, prazo, limites);
   if (status == null || typeof prazo !== "number") {
     return {
       status: null,
       motivo: "dentro",
       alertar: false,
-      limiteAplicado: limites.normal,
+      metaAplicada: limites.meta,
+      tetoAplicado: limites.maximo,
     };
   }
 
@@ -179,7 +197,8 @@ export function avaliarPedido(
       status,
       motivo: "nao_permitido",
       alertar: true,
-      limiteAplicado: limites.maximo,
+      metaAplicada: limites.meta,
+      tetoAplicado: limites.maximo,
     };
   }
 
@@ -197,27 +216,44 @@ export function avaliarPedido(
       status,
       motivo: "silenciado",
       alertar: false,
-      limiteAplicado: limites.maximo,
+      metaAplicada: limites.meta,
+      tetoAplicado: limites.maximo,
     };
   }
 
   // 3. Acordo mais rígido que o padrão (o caso do 8x que virou 150).
+  //
+  // O acordo é combinado em CONDIÇÃO ("30/150"), então o que ele fixa é o
+  // último vencimento. A meta correspondente é a média que essa condição
+  // produz — a mesma conta da política, só que com o número do cliente.
   const combinado = valeAgora ? acordo!.prazo_acordado : null;
-  const limiteAplicado =
-    combinado != null ? Math.min(combinado, limites.normal) : limites.normal;
+  const metaAplicada =
+    combinado != null
+      ? Math.min(
+          mediaDaCondicao(limites.primeiraParcela, combinado),
+          limites.meta
+        )
+      : limites.meta;
 
   // A mesma folga de calendário vale para o acordo: um "5x mensal" combinado
   // em 150 chega a 153 sem ninguém ter mudado a condição.
-  if (prazo > limiteAplicado + limites.tolerancia) {
+  if (media != null && media > metaAplicada + limites.tolerancia) {
     return {
       status,
-      motivo: combinado != null ? "fora_do_acordo" : "excecao",
+      motivo: combinado != null ? "fora_do_acordo" : "fora_do_padrao",
       alertar: true,
-      limiteAplicado,
+      metaAplicada,
+      tetoAplicado: limites.maximo,
     };
   }
 
-  return { status, motivo: "dentro", alertar: false, limiteAplicado };
+  return {
+    status,
+    motivo: "dentro",
+    alertar: false,
+    metaAplicada,
+    tetoAplicado: limites.maximo,
+  };
 }
 
 /**

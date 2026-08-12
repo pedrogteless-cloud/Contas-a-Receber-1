@@ -37,21 +37,21 @@ export const AJUDA = {
   prazoRecebimento:
     "Dias entre a entrada e o vencimento da ÚLTIMA parcela da venda — o tempo total até receber tudo daquela compra. É o que representa a decisão de crédito.",
   limite:
-    "Prazo padrão máximo da política (150 dias). Pedidos cujo ÚLTIMO boleto vence dentro desse prazo são Normais. Acima dele, o pedido vira exceção estratégica ou passa a não ser permitido.",
+    "Prazo padrão da política (150 dias): é o vencimento máximo da última parcela numa condição normal. Ele também define a meta — em 30/150 a média das parcelas dá 90 —, e é a meta que decide se um pedido está fora do padrão.",
   limiteMaximo:
-    "Teto absoluto da política (180 dias). Entre o prazo padrão e este teto, o pedido é uma exceção estratégica e gera alerta. Acima do teto, o prazo não é permitido e gera alerta crítico.",
+    "Teto absoluto da política (180 dias). Nenhum pedido pode passar daqui, qualquer que seja a média. Quem passa continua na mesma lista de fora do padrão, mas com o selo ⛔ de não permitido.",
   tolerancia:
     "Folga para a variação de calendário, não para afrouxar a regra. Uma condição \"5x mensal\" dá 150 a 153 dias corridos dependendo dos meses que atravessa \u2014 só quem entra em fevereiro fecha exatos 150 \u2014 e o vencimento em fim de semana empurra mais 1 ou 2. Sem esta folga, quase toda condição mensal padrão viraria alerta.",
   metaPrazoMedio:
     "A meta não é chute: ela sai da própria política. Uma condição parcelada mensalmente da primeira parcela até o prazo padrão produz uma média exata \u2014 em 30/150 as cinco parcelas são 30/60/90/120/150 e a média dá 90. A conta é (prazo padrão + primeira parcela) ÷ 2. Se a carteira estiver acima da meta com a política sendo respeitada, é sinal de que os pedidos estão concentrados nas condições mais longas.",
   politicaPrazo:
-    "Três faixas, sempre pelo vencimento do ÚLTIMO boleto do pedido: até o prazo padrão = Normal; do padrão até o teto = Exceção estratégica (alerta); acima do teto = Não permitido (alerta crítico).",
-  excecoesEstrategicas:
-    "Pedidos com prazo entre o padrão e o teto da política. Não são proibidos, mas precisam de decisão consciente — por isso aparecem no alerta com cliente, pedido, valor, condição de pagamento e último vencimento.",
+    "Só existem duas situações: Dentro do padrão ou FORA DO PADRÃO 🚨. O que decide é a META de prazo médio concedido — se o pedido produz uma média acima da meta (já com a tolerância de calendário), ele está fora do padrão. Não existe mais “exceção estratégica”: fugir da meta é fugir da meta. Acima do teto em dias, o pedido segue na mesma lista, com o selo ⛔ de não permitido.",
+  foraDoPadrao:
+    "Pedidos que produzem prazo médio concedido acima da meta — é o desvio da META que dispara, não o vencimento da última parcela. Uma condição 90/120, por exemplo, cabe nos 150 dias mas dá média 105: está fora do padrão. Já vem descontada a tolerância de calendário, e clientes marcados como “estou ciente” na aba Clientes aparecem na tela sem gerar alerta no Telegram.",
   acordoCliente:
     "O que foi combinado com aquele cliente, valendo daqui para frente. Escreva como voc\u00ea fala: \"30/150\" \u00e9 a faixa \u2014 da primeira parcela aos 30 dias at\u00e9 a \u00faltima aos 150, de 30 em 30 \u2014 e o sistema expande para 30/60/90/120/150 na sua frente. A regra cobra o \u00faltimo vencimento (150). O \"antes\" ao lado \u00e9 preenchido sozinho, a partir do pior pedido que o cliente vinha praticando. O sino cortado marca \u201cestou ciente\u201d: o cliente para de gerar alerta, mas pedidos acima do teto da pol\u00edtica continuam avisando.",
   naoPermitidos:
-    "Pedidos com prazo acima do teto da política. Fogem da regra e geram alerta crítico, em mensagem separada para não se perderem no meio das exceções.",
+    "Parte dos pedidos fora do padrão: os que passaram do teto em dias (180). Continuam na mesma lista, marcados com ⛔ — e o alerta deles nunca é silenciado, nem para cliente marcado como “estou ciente”.",
   acimaLimite:
     "Conta BOLETOS, um a um, cujo prazo passou do padrão (já com a tolerância). É diferente do bloco \"Política de prazo\", que conta PEDIDOS pelo vencimento do último título — por isso os dois números não batem, e não deveriam mesmo bater.",
   valorCarteira:
@@ -61,7 +61,7 @@ export const AJUDA = {
   vencidos:
     "Boletos cuja data de vencimento já passou, considerando a data de hoje. Nas tabelas eles aparecem em vermelho, com há quanto tempo venceram.",
   faixaPrazo:
-    "Distribuição dos boletos por faixa de prazo. As faixas acompanham a política: as duas últimas são exatamente a exceção estratégica e o não permitido. Ajuda a ver onde a carteira está concentrada.",
+    "Distribuição dos boletos por faixa de prazo. As faixas acompanham a política, e a última é o que passou do teto — o não permitido. Ajuda a ver onde a carteira está concentrada.",
   evolucaoPrazo:
     "Prazo de recebimento dos pedidos, ponderado pelo valor e agrupado pelo mês da VENDA. Cada venda entra uma única vez, no mês em que foi feita — então a linha mostra de verdade se os prazos concedidos estão subindo ou caindo.",
   participacaoEmpresa:

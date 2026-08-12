@@ -212,8 +212,8 @@ export interface FaixaPrazo {
  *
  * Antes eram "até 30 / 31–45 / 46–60 / 61–90 / +90", desenhadas para um limite
  * de 60 dias. Com a política em 150/180 isso empilhava quase tudo em "+90" e o
- * gráfico deixava de informar. Agora os cortes saem dos próprios limites, e as
- * duas últimas faixas são exatamente a exceção estratégica e o não permitido.
+ * gráfico deixava de informar. Agora os cortes saem dos próprios limites, e a
+ * última faixa é exatamente o que passou do teto — o não permitido.
  */
 export function faixasDaPolitica(
   limites: LimitesPrazo

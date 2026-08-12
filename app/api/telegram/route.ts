@@ -4,8 +4,10 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { type Boleto } from "@/lib/boletos";
 import {
   agruparPedidos,
+  classificarPedido,
   desvioDaMeta,
   lerLimites,
+  seloNaoPermitido,
   type LimitesPrazo,
   type Pedido,
 } from "@/lib/politica-prazo";
@@ -84,8 +86,15 @@ function montarLotes(
 }
 
 /**
- * Os dois avisos da política, em mensagens separadas e nesta ordem: o crítico
- * primeiro, para não ficar enterrado no meio das exceções.
+ * Os avisos da política.
+ *
+ * Uma lista só: tudo que passou do prazo padrão é FORA DO PADRÃO, ordenado do
+ * pior para o melhor, com o selo ⛔ nos que passaram também do teto. Antes eram
+ * duas categorias — "não permitido" e "exceção estratégica" —, e a segunda
+ * soava a carimbo de aprovação para algo que está, na verdade, fugindo da meta.
+ *
+ * "Fora do acordo" continua em mensagem própria: ali não é a política que foi
+ * furada, é uma conversa que já tinha acontecido com aquele cliente.
  */
 function montarAvisos(
   pedidos: Pedido[],
@@ -95,73 +104,93 @@ function montarAvisos(
   prazoPorCliente: Map<string, number>,
   avisos: MapaNotificacoes
 ): { lotes: Lote[]; silenciados: string[] } {
-  const naoPermitidos: Pedido[] = [];
-  const excecoes: Pedido[] = [];
+  const foraDoPadrao: Pedido[] = [];
   const foraDoAcordo: Pedido[] = [];
   // Pedidos de clientes que o time já marcou como "estou ciente": não viram
   // aviso, mas são marcados como tratados para não ficarem pendentes para sempre.
   const silenciados: string[] = [];
 
+  // A média real do pedido (ponderada pelo valor) é o que dispara a regra —
+  // guardamos aqui para não recalculá-la na hora de escrever a linha.
+  const medias = new Map<string, number | null>();
+  const statusPedido = (p: Pedido) =>
+    classificarPedido(medias.get(p.chave) ?? null, p.prazo, limites);
+
   for (const p of pedidos) {
     const dataImportacao = p.boletos[0]?.data_importacao ?? null;
+    const media = prazoMedioPonderado(p.boletos);
+    medias.set(p.chave, media);
+
     const av = avaliarPedido(
       p.prazo,
       acordos.get(chaveCliente(p.sacado)),
       limites,
-      dataImportacao
+      dataImportacao,
+      media
     );
     if (!av.alertar) {
       if (av.motivo === "silenciado") silenciados.push(...p.ids);
       continue;
     }
-    if (av.motivo === "nao_permitido") naoPermitidos.push(p);
-    else if (av.motivo === "fora_do_acordo") foraDoAcordo.push(p);
-    else excecoes.push(p);
+    if (av.motivo === "fora_do_acordo") foraDoAcordo.push(p);
+    else foraDoPadrao.push(p);
   }
+
+  // Pior primeiro: quem mais fugiu da meta abre a lista, e quem estourou o
+  // teto em dias vem na frente de todos.
+  const gravidade = (p: Pedido) =>
+    (statusPedido(p) === "nao_permitido" ? 1_000_000 : 0) +
+    (medias.get(p.chave) ?? p.prazo ?? 0);
+  foraDoPadrao.sort((a, b) => gravidade(b) - gravidade(a));
 
   const posicao = (p: Pedido) => {
     const prazoCliente = prazoPorCliente.get(chaveCliente(p.sacado)) ?? null;
+    const mediaPedido = medias.get(p.chave) ?? null;
     return {
       prazoCliente,
       desvio: desvioDaMeta(prazoCliente, limites.meta),
       meta: limites.meta,
+      mediaPedido,
+      desvioPedido: desvioDaMeta(mediaPedido, limites.meta),
+      selo: seloNaoPermitido(statusPedido(p), limites),
     };
   };
+
+  const quantosNaoPermitidos = foraDoPadrao.filter(
+    (p) => statusPedido(p) === "nao_permitido"
+  ).length;
 
   // Um tipo desligado na aba Notificações simplesmente não gera lote — mas os
   // boletos seguem marcados nas telas, e voltam a avisar se for religado.
   const lotes = [
-    ...(notificacaoAtiva(avisos, "politica_critico")
+    ...(notificacaoAtiva(avisos, "politica_fora_do_padrao")
       ? montarLotes(
-      naoPermitidos,
-      (qtd, valor) =>
-        `🚨 ${qtd} pedido${qtd > 1 ? "s" : ""} ACIMA DE ${
-          limites.maximo
-        } DIAS · ${moedaCurta(valor)}\nPrazo não permitido pela política.`,
-      posicao
-    )
+          foraDoPadrao,
+          (qtd, valor) => {
+            const cabecalho = `🚨 ${qtd} pedido${
+              qtd > 1 ? "s" : ""
+            } FORA DO PADRÃO · ${moedaCurta(valor)}`;
+            const explica = `Produzem prazo médio concedido acima da meta de ${limites.meta} dias.`;
+            const teto =
+              quantosNaoPermitidos > 0
+                ? `\n⛔ ${quantosNaoPermitidos} dele${
+                    quantosNaoPermitidos > 1 ? "s" : ""
+                  } acima de ${limites.maximo} dias — não permitido.`
+                : "";
+            return `${cabecalho}\n${explica}${teto}`;
+          },
+          posicao
+        )
       : []),
     ...(notificacaoAtiva(avisos, "acordo_descumprido")
       ? montarLotes(
-      foraDoAcordo,
-      (qtd, valor) =>
-        `🤝 ${qtd} pedido${qtd > 1 ? "s" : ""} FORA DO ACORDO · ${moedaCurta(
-          valor
-        )}\nEstes clientes já tinham prazo combinado — e o pedido passou dele.`,
-      posicao
-    )
-      : []),
-    ...(notificacaoAtiva(avisos, "politica_excecao")
-      ? montarLotes(
-      excecoes,
-      (qtd, valor) =>
-        `⚠️ ${qtd} exceç${qtd > 1 ? "ões" : "ão"} estratégica${
-          qtd > 1 ? "s" : ""
-        } · ${moedaCurta(valor)}\nPrazo de recebimento entre ${
-          limites.normal + 1
-        } e ${limites.maximo} dias.`,
-      posicao
-    )
+          foraDoAcordo,
+          (qtd, valor) =>
+            `🤝 ${qtd} pedido${qtd > 1 ? "s" : ""} FORA DO ACORDO · ${moedaCurta(
+              valor
+            )}\nEstes clientes já tinham prazo combinado — e o pedido passou dele.`,
+          posicao
+        )
       : []),
   ];
 

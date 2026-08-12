@@ -26,7 +26,12 @@ import {
   type LinhaImportada,
 } from "@/lib/boletos";
 import { AJUDA } from "@/lib/ajuda-textos";
-import { lerLimites } from "@/lib/politica-prazo";
+import {
+  LIMITES_PADRAO,
+  foraDoPadraoPorLinha,
+  lerLimites,
+  type LimitesPrazo,
+} from "@/lib/politica-prazo";
 import { hojeISO } from "@/lib/tempo";
 import { corEmpresa } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -72,7 +77,8 @@ type Regra = "venda" | "boleto";
 export default function ImportacaoPage() {
   const [empresaPadrao, setEmpresaPadrao] = useState<string>(EMPRESAS[0]);
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
-  const [limite, setLimite] = useState<number>(60);
+  const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
+  const limite = limites.normal;
   const [regra, setRegra] = useState<Regra>("venda");
   const [processando, setProcessando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -88,7 +94,7 @@ export default function ImportacaoPage() {
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
-        setLimite(lerLimites(data).normal);
+        setLimites(lerLimites(data));
         if (data?.regra_limite) setRegra(data.regra_limite as Regra);
       });
   }, []);
@@ -270,21 +276,26 @@ export default function ImportacaoPage() {
       // recebimento considere parcelas importadas em dias anteriores.
       const { data: mesmasVendas } = await supabase
         .from("boletos")
-        .select("empresa, sacado, nosso_numero, seu_numero, data_entrada, data_vencimento");
+        .select(
+          "empresa, sacado, nosso_numero, seu_numero, data_entrada, data_vencimento, valor, prazo_dias"
+        );
 
-      const dadosVenda = calcularDadosVenda(
-        novas,
-        (mesmasVendas ?? []) as unknown as typeof novas
-      );
+      const anteriores = (mesmasVendas ?? []) as unknown as typeof novas;
+      const dadosVenda = calcularDadosVenda(novas, anteriores);
+
+      // Fora do padrão = a venda inteira produz prazo médio acima da meta.
+      // Na regra por parcela (opcional), cada boleto responde sozinho pelo
+      // prazo padrão, como era antes.
+      const foraDoPadrao = foraDoPadraoPorLinha(novas, anteriores, limites);
 
       const hoje = hojeISO();
       const registros = novas.map((l, i) => {
         const prazo = calcularPrazoDias(l.data_entrada, l.data_vencimento);
         const v = dadosVenda[i];
-        // O limite é avaliado pelo prazo de recebimento da venda (padrão) ou
-        // por parcela, conforme a regra escolhida em Configurações.
-        const prazoAvaliado =
-          regra === "venda" ? (v.prazo_recebimento ?? prazo) : prazo;
+        const excedeu =
+          regra === "venda"
+            ? foraDoPadrao[i]
+            : prazo != null && prazo > limite;
         return {
           data_importacao: hoje,
           empresa: l.empresa,
@@ -299,7 +310,7 @@ export default function ImportacaoPage() {
           parcela: v.parcela,
           total_parcelas: v.total_parcelas,
           prazo_recebimento: v.prazo_recebimento,
-          excedeu_limite: prazoAvaliado != null && prazoAvaliado > limite,
+          excedeu_limite: excedeu,
           alerta_enviado: false,
         };
       });

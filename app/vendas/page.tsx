@@ -10,12 +10,12 @@ import {
   formatarMoeda,
   type Boleto,
 } from "@/lib/boletos";
-import { agruparVendas } from "@/lib/analytics";
+import { agruparVendas, prazoMedioPonderado } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
 import {
   LIMITES_PADRAO,
   STATUS,
-  classificarPrazo,
+  classificarPedido,
   lerLimites,
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
@@ -299,16 +299,18 @@ export default function VendasPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {(() => {
-                              const st = classificarPrazo(c.prazoUltima, limites);
+                              // A regra é o desvio da META, medido sobre a
+                              // média real da venda — não sobre a última parcela.
+                              const st = classificarPedido(
+                                prazoMedioPonderado(c.boletos),
+                                c.prazoUltima,
+                                limites
+                              );
                               if (!st) return "—";
                               return (
                                 <Badge
                                   variant={
-                                    st === "nao_permitido"
-                                      ? "destructive"
-                                      : st === "excecao"
-                                        ? "warning"
-                                        : "success"
+                                    st === "normal" ? "success" : "destructive"
                                   }
                                 >
                                   {STATUS[st].emoji} {STATUS[st].curto}

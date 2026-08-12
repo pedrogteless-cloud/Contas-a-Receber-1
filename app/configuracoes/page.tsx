@@ -241,7 +241,7 @@ export default function ConfiguracoesPage() {
         setAviso({
           tipo: "erro",
           texto:
-            "O prazo máximo não pode ser menor que o prazo padrão — não sobraria faixa para a exceção estratégica.",
+            "O prazo máximo não pode ser menor que o prazo padrão — o teto ficaria abaixo da própria condição normal.",
         });
         return;
       }
@@ -308,39 +308,36 @@ export default function ConfiguracoesPage() {
         <CardHeader>
           <CardTitle>Política de prazo</CardTitle>
           <CardDescription>
-            A regra vale sobre o pedido, pelo vencimento do último boleto.
+            A regra vale sobre o pedido, medida pelo prazo médio concedido que
+            ele produz — comparado com a meta.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 grid gap-2 sm:grid-cols-3">
+          <div className="mb-4 grid gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
               <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-                🟢 Normal
+                🟢 Dentro do padrão
               </p>
               <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">
-                até {limite} dias
+                média até {meta} dias
                 {tolerancia > 0 && (
                   <span className="block opacity-80">
-                    (aceita até {limite + tolerancia} pela folga)
+                    (aceita até {Number(meta) + tolerancia} pela folga de
+                    calendário)
                   </span>
                 )}
               </p>
             </div>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                ⚠️ Exceção estratégica
-              </p>
-              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-                {limite + tolerancia + 1} a {maximo + tolerancia} dias · gera
-                alerta
-              </p>
-            </div>
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
               <p className="text-xs font-semibold text-red-800 dark:text-red-300">
-                🚨 Não permitido
+                🚨 Fora do padrão
               </p>
               <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">
-                acima de {maximo + tolerancia} dias · alerta crítico
+                média acima de {Number(meta) + tolerancia} dias · gera alerta
+                <span className="block opacity-80">
+                  ⛔ e acima de {maximo + tolerancia} dias de prazo, não é
+                  permitido — alerta que ninguém silencia
+                </span>
               </p>
             </div>
           </div>

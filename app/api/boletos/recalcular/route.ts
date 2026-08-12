@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { lerLimites } from "@/lib/politica-prazo";
+import { foraDoPadraoPorLinha, lerLimites } from "@/lib/politica-prazo";
 import { ehAdmin } from "@/lib/auth";
 import { calcularDadosVenda, type Boleto } from "@/lib/boletos";
 import { registrarAuditoria, sessaoAtual } from "@/lib/sessao-servidor";
@@ -55,15 +55,19 @@ export async function POST() {
 
   // Recalcula documento/parcela/prazo de recebimento agrupando por venda.
   const dados = calcularDadosVenda(boletos);
+  // E reaplica a régua da política: fora do padrão é o desvio da META, medido
+  // sobre a média ponderada da venda inteira.
+  const foraDoPadrao = foraDoPadraoPorLinha(boletos, [], limites);
 
   let atualizados = 0;
   let acima = 0;
 
   for (const [i, b] of boletos.entries()) {
     const v = dados[i];
-    const prazoAvaliado =
-      regra === "venda" ? (v.prazo_recebimento ?? b.prazo_dias) : b.prazo_dias;
-    const excedeu = prazoAvaliado != null && prazoAvaliado > limite;
+    const excedeu =
+      regra === "venda"
+        ? foraDoPadrao[i]
+        : b.prazo_dias != null && b.prazo_dias > limite;
     if (excedeu) acima++;
 
     const mudou =
@@ -95,7 +99,7 @@ export async function POST() {
 
   await registrarAuditoria(
     "boletos.recalculados",
-    `Reaplicou o limite de ${limite} dias (regra: ${regra}). ${atualizados} boleto(s) atualizado(s); ${acima} acima do limite.`,
+    `Reaplicou a política (meta ${limites.meta} dias, teto ${limites.maximo}, regra: ${regra}). ${atualizados} boleto(s) atualizado(s); ${acima} fora do padrão.`,
     s
   );
 

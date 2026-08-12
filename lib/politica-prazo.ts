@@ -2,20 +2,34 @@
 // lib/politica-prazo.ts
 // A política de prazo de recebimento do Grupo Ley.
 //
-// A regra vale sobre o PEDIDO (a venda inteira), pelo vencimento do ÚLTIMO
-// título — não parcela a parcela:
+// A regra vale sobre o PEDIDO (a venda inteira), não parcela a parcela, e o
+// que ela cobra é a META de prazo médio concedido:
 //
-//   até o limite normal ............ NORMAL
-//   entre o normal e o máximo ...... EXCEÇÃO ESTRATÉGICA  (gera alerta)
-//   acima do máximo ................ NÃO PERMITIDO        (alerta crítico)
+//   média até a meta ............... DENTRO DO PADRÃO
+//   média acima da meta ............ FORA DO PADRÃO   🚨 (gera alerta)
+//   último vencimento > o teto ..... FORA DO PADRÃO   ⛔ não permitido
+//
+// São duas situações, não três. Antes existia uma faixa do meio chamada
+// "exceção estratégica", e o nome soava a carimbo de aprovação para algo que
+// está, na verdade, fugindo da meta — quem passa do teto em dias continua na
+// mesma lista, só que com o selo ⛔.
+//
+// Medir pela média, e não pelo vencimento da última parcela, muda o que o
+// sistema enxerga: uma condição 90/120 cabe folgada nos 150 dias, mas produz
+// média 105 — quinze dias acima da meta. Pela régua antiga, passava batido.
 //
 // Mantido separado das telas e do Telegram porque é regra de negócio: muda por
 // decisão da diretoria, não por causa de layout.
 // ---------------------------------------------------------------------------
 
-import { chaveVenda, documentoEParcela, type Boleto } from "./boletos";
+import {
+  calcularPrazoDias,
+  chaveVenda,
+  documentoEParcela,
+  type Boleto,
+} from "./boletos";
 
-export type StatusPrazo = "normal" | "excecao" | "nao_permitido";
+export type StatusPrazo = "normal" | "fora_do_padrao" | "nao_permitido";
 
 export interface LimitesPrazo {
   /** Até aqui o prazo é livre. Padrão da política: 150 dias. */
@@ -139,19 +153,34 @@ export function lerLimites(
 }
 
 /**
- * Em que faixa da política esse prazo de recebimento cai.
+ * Em que faixa da política um pedido cai.
  *
- * As duas fronteiras ganham a tolerância de calendário: 153 dias numa política
- * de 150 é a MESMA condição comercial, só atravessando meses mais longos.
+ * O gatilho é a META: o que importa é o pedido fugir do prazo médio concedido
+ * que a operação persegue, não apenas o último boleto passar de uma data. Uma
+ * condição com entrada esticada (90/120, por exemplo) fica dentro dos 150 mas
+ * produz média 105 — está fugindo da meta, e agora aparece como tal.
+ *
+ * Por cima disso, o teto continua sendo regra dura: passou do máximo em dias,
+ * é "não permitido", independentemente da média.
+ *
+ * As duas comparações levam a tolerância de calendário.
  */
-export function classificarPrazo(
-  prazo: number | null | undefined,
+export function classificarPedido(
+  mediaPedido: number | null | undefined,
+  ultimoVencimento: number | null | undefined,
   limites: LimitesPrazo
 ): StatusPrazo | null {
-  if (typeof prazo !== "number") return null;
-  if (prazo <= limites.normal + limites.tolerancia) return "normal";
-  if (prazo <= limites.maximo + limites.tolerancia) return "excecao";
-  return "nao_permitido";
+  const temMedia = typeof mediaPedido === "number";
+  const temUltimo = typeof ultimoVencimento === "number";
+  if (!temMedia && !temUltimo) return null;
+
+  if (temUltimo && ultimoVencimento! > limites.maximo + limites.tolerancia) {
+    return "nao_permitido";
+  }
+  if (temMedia && mediaPedido! > limites.meta + limites.tolerancia) {
+    return "fora_do_padrao";
+  }
+  return "normal";
 }
 
 /** O prazo passou do limite, mas só pela folga de calendário. */
@@ -163,22 +192,41 @@ export function dentroDaTolerancia(
   return prazo > limites.normal && prazo <= limites.normal + limites.tolerancia;
 }
 
+/**
+ * Rótulos das faixas.
+ *
+ * Não existe mais "exceção estratégica": o nome soava a carimbo de aprovação,
+ * quando o que acontece é um pedido FUGINDO do padrão. Tudo que passa do prazo
+ * padrão é "Fora do padrão", com sirene. O teto de 180 continua sendo regra
+ * dura, mas vira um selo dentro da mesma categoria — não uma categoria à parte
+ * que pudesse soar mais aceitável que a outra.
+ */
 export const STATUS: Record<
   StatusPrazo,
   { rotulo: string; curto: string; emoji: string }
 > = {
-  normal: { rotulo: "Normal", curto: "Normal", emoji: "🟢" },
-  excecao: {
-    rotulo: "Exceção estratégica",
-    curto: "Exceção",
-    emoji: "⚠️",
-  },
-  nao_permitido: {
-    rotulo: "Não permitido",
-    curto: "Não permitido",
+  normal: { rotulo: "Dentro do padrão", curto: "No padrão", emoji: "🟢" },
+  fora_do_padrao: {
+    rotulo: "Fora do padrão",
+    curto: "Fora do padrão",
     emoji: "🚨",
   },
+  nao_permitido: {
+    rotulo: "Fora do padrão · não permitido",
+    curto: "Não permitido",
+    emoji: "⛔",
+  },
 };
+
+/** O selo extra de quem passou do teto — some quando está só fora do padrão. */
+export function seloNaoPermitido(
+  status: StatusPrazo | null,
+  limites: LimitesPrazo
+): string | null {
+  return status === "nao_permitido"
+    ? `⛔ Acima de ${limites.maximo} dias — não permitido`
+    : null;
+}
 
 /** "30/60/90" — a condição de pagamento, lida dos prazos das parcelas. */
 export function condicaoPagamento(prazos: number[]): string {
@@ -264,6 +312,96 @@ export function agruparPedidos(boletos: Boleto[]): Pedido[] {
 }
 
 // ---------------------------------------------------------------------------
+// A marcação gravada na importação
+// ---------------------------------------------------------------------------
+
+/** O mínimo que uma linha precisa ter para ser avaliada pela política. */
+export interface LinhaVenda {
+  empresa?: string | null;
+  sacado?: string | null;
+  seu_numero?: string | null;
+  nosso_numero?: string | null;
+  data_entrada?: string | null;
+  data_vencimento?: string | null;
+  valor?: number | null;
+  prazo_dias?: number | null;
+}
+
+/**
+ * Diz, linha a linha, se o PEDIDO a que ela pertence está fora do padrão.
+ *
+ * É esta marcação que a importação grava em `excedeu_limite` e que decide
+ * quem entra na fila de alertas — por isso ela precisa usar exatamente a
+ * mesma régua das telas: o desvio da META, medido sobre a média ponderada
+ * real do pedido, e não sobre o vencimento da última parcela.
+ *
+ * A diferença não é acadêmica: uma condição 90/120 cabe folgada nos 150 dias
+ * e passaria batido pela régua antiga, mas produz média 105 — quinze dias
+ * acima da meta. Com a régua antiga o alerta nunca chegaria a existir.
+ *
+ * `extras` são os boletos já gravados das mesmas vendas, para que uma parcela
+ * importada hoje seja avaliada junto com as irmãs importadas ontem.
+ */
+export function foraDoPadraoPorLinha<T extends LinhaVenda>(
+  linhas: T[],
+  extras: T[],
+  limites: LimitesPrazo
+): boolean[] {
+  const grupos = new Map<string, T[]>();
+  for (const l of [...linhas, ...extras]) {
+    const chave = chaveVenda(l);
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(l);
+  }
+
+  // Uma venda só é classificada uma vez; todas as parcelas herdam o resultado.
+  const decidido = new Map<string, boolean>();
+
+  return linhas.map((l) => {
+    const chave = chaveVenda(l);
+    const jaSabe = decidido.get(chave);
+    if (jaSabe !== undefined) return jaSabe;
+
+    const grupo = grupos.get(chave) ?? [l];
+    const prazoDe = (g: T) =>
+      typeof g.prazo_dias === "number"
+        ? g.prazo_dias
+        : calcularPrazoDias(g.data_entrada ?? null, g.data_vencimento ?? null);
+
+    let somaValor = 0;
+    let somaProduto = 0;
+    for (const g of grupo) {
+      const prazo = prazoDe(g);
+      const valor = g.valor ?? 0;
+      if (typeof prazo !== "number" || valor <= 0) continue;
+      somaValor += valor;
+      somaProduto += valor * prazo;
+    }
+    const media =
+      somaValor > 0 ? Math.round((somaProduto / somaValor) * 10) / 10 : null;
+
+    // O último vencimento da venda inteira — é ele que o teto duro cobra.
+    const entradas = grupo
+      .map((g) => g.data_entrada)
+      .filter((d): d is string => Boolean(d))
+      .sort();
+    const vencimentos = grupo
+      .map((g) => g.data_vencimento)
+      .filter((d): d is string => Boolean(d))
+      .sort();
+    const ultimo = calcularPrazoDias(
+      entradas[0] ?? l.data_entrada ?? null,
+      vencimentos[vencimentos.length - 1] ?? l.data_vencimento ?? null
+    );
+
+    const status = classificarPedido(media, ultimo, limites);
+    const fora = status === "fora_do_padrao" || status === "nao_permitido";
+    decidido.set(chave, fora);
+    return fora;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Indicadores do painel
 // ---------------------------------------------------------------------------
 
@@ -273,34 +411,43 @@ export interface Contagem {
 }
 
 export interface IndicadoresPolitica {
-  /** Tudo que passou do limite normal — exceções + não permitidos. */
-  acimaDoNormal: Contagem;
-  excecoes: Contagem;
+  /** Tudo fora do padrão, incluindo os que passaram do teto. */
+  foraDoPadrao: Contagem;
+  /** Subconjunto: os que passaram do teto em dias. */
   naoPermitidos: Contagem;
 }
 
 const ZERO: Contagem = { quantidade: 0, valor: 0 };
 
+/**
+ * Conta os pedidos fora do padrão. Aceita a média já calculada; sem ela,
+ * deriva da condição padrão.
+ */
 export function indicadoresPolitica(
-  pedidos: Pick<Pedido, "prazo" | "valorTotal">[],
+  pedidos: (Pick<Pedido, "prazo" | "valorTotal"> & { media?: number | null })[],
   limites: LimitesPrazo
 ): IndicadoresPolitica {
   const acc: IndicadoresPolitica = {
-    acimaDoNormal: { ...ZERO },
-    excecoes: { ...ZERO },
+    foraDoPadrao: { ...ZERO },
     naoPermitidos: { ...ZERO },
   };
 
   for (const p of pedidos) {
-    const status = classificarPrazo(p.prazo, limites);
-    if (status !== "excecao" && status !== "nao_permitido") continue;
+    const media =
+      p.media ??
+      (typeof p.prazo === "number"
+        ? mediaDaCondicao(limites.primeiraParcela, p.prazo)
+        : null);
+    const status = classificarPedido(media, p.prazo, limites);
+    if (status !== "fora_do_padrao" && status !== "nao_permitido") continue;
 
-    acc.acimaDoNormal.quantidade++;
-    acc.acimaDoNormal.valor += p.valorTotal;
+    acc.foraDoPadrao.quantidade++;
+    acc.foraDoPadrao.valor += p.valorTotal;
 
-    const alvo = status === "excecao" ? acc.excecoes : acc.naoPermitidos;
-    alvo.quantidade++;
-    alvo.valor += p.valorTotal;
+    if (status === "nao_permitido") {
+      acc.naoPermitidos.quantidade++;
+      acc.naoPermitidos.valor += p.valorTotal;
+    }
   }
 
   return acc;

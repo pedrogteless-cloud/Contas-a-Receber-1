@@ -69,7 +69,14 @@ function montarResumo(
 ): string {
   const doDia = boletos.filter((b) => b.data_importacao === hoje);
   const pedidosDoDia = agruparPedidos(doDia);
-  const ind = indicadoresPolitica(pedidosDoDia, limites);
+  const ind = indicadoresPolitica(
+    pedidosDoDia.map((p) => ({
+      prazo: p.prazo,
+      valorTotal: p.valorTotal,
+      media: prazoMedioPonderado(p.boletos),
+    })),
+    limites
+  );
 
   const linhas: string[] = [
     `📊 Fechamento do dia · ${dataCurtaISO(hoje)}`,
@@ -115,33 +122,28 @@ function montarResumo(
       );
     }
 
-    abrirBloco(linhas, `📐 Pedidos fora da política de ${limites.normal} dias`);
+    abrirBloco(linhas, "🚨 Pedidos fora do padrão");
     linhas.push(
-      "Contando pelo vencimento da última parcela de cada pedido:",
+      `Fora do padrão = o pedido produz prazo médio acima da meta de ${limites.meta} dias.`,
       ""
     );
-    if (ind.acimaDoNormal.quantidade === 0) {
-      linhas.push(
-        `✅ Nenhum pedido passou de ${limites.normal} dias hoje.`
-      );
+    if (ind.foraDoPadrao.quantidade === 0) {
+      linhas.push("✅ Nenhum pedido fora do padrão hoje.");
     } else {
       linhas.push(
-        `${ind.acimaDoNormal.quantidade} pedido${
-          ind.acimaDoNormal.quantidade > 1 ? "s" : ""
-        } passou${
-          ind.acimaDoNormal.quantidade > 1 ? "ram" : ""
-        } de ${limites.normal} dias · ${moedaCurta(ind.acimaDoNormal.valor)}`,
-        `  ⚠️ ${ind.excecoes.quantidade} ${
-          ind.excecoes.quantidade === 1 ? "é" : "são"
-        } exceção estratégica (${limites.normal + 1} a ${
-          limites.maximo
-        } dias) · ${moedaCurta(ind.excecoes.valor)}`,
-        `  🚨 ${ind.naoPermitidos.quantidade} est${
-          ind.naoPermitidos.quantidade === 1 ? "á" : "ão"
-        } acima de ${
-          limites.maximo
-        } dias, o que não é permitido · ${moedaCurta(ind.naoPermitidos.valor)}`
+        `${ind.foraDoPadrao.quantidade} pedido${
+          ind.foraDoPadrao.quantidade > 1 ? "s" : ""
+        } fora do padrão · ${moedaCurta(ind.foraDoPadrao.valor)}`
       );
+      if (ind.naoPermitidos.quantidade > 0) {
+        linhas.push(
+          `  ⛔ ${ind.naoPermitidos.quantidade} dele${
+            ind.naoPermitidos.quantidade > 1 ? "s" : ""
+          } acima de ${limites.maximo} dias, o que não é permitido · ${moedaCurta(
+            ind.naoPermitidos.valor
+          )}`
+        );
+      }
     }
 
     // Quem puxou a média para cima hoje — é aqui que o trabalho continua.

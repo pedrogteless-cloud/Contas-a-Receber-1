@@ -11,8 +11,7 @@
 // ---------------------------------------------------------------------------
 
 export type ChaveNotificacao =
-  | "politica_critico"
-  | "politica_excecao"
+  | "politica_fora_do_padrao"
   | "acordo_descumprido"
   | "acordo_reducao"
   | "fechamento_dia"
@@ -44,39 +43,29 @@ export const MOMENTOS: Record<Momento, string> = {
 
 export const NOTIFICACOES: DefinicaoNotificacao[] = [
   {
-    chave: "politica_critico",
-    titulo: "Prazo não permitido",
+    chave: "politica_fora_do_padrao",
+    titulo: "Fora do padrão",
     descricao:
-      "Pedido cujo último vencimento passou do teto da política. É a única regra que não deveria ser silenciada — nem por cliente marcado como “estou ciente”.",
+      "Pedido que produz prazo médio concedido acima da META — é o desvio da meta que dispara, não o vencimento da última parcela. Antes isto vinha dividido em “não permitido” e “exceção estratégica”, e o segundo nome soava a carimbo de aprovação para algo que, na verdade, está fugindo da meta. Agora é uma coisa só, com os que passaram do teto em dias marcados com ⛔ dentro da própria lista. Respeita a tolerância de calendário e os clientes marcados como “estou ciente”.",
     quando: "Assim que a importação é confirmada",
     momento: "importacao",
     emoji: "🚨",
     padrao: true,
     critico: true,
-    exemplo: `🚨 1 pedido ACIMA DE 180 DIAS · R$ 95.000
-Prazo não permitido pela política.
+    exemplo: `🚨 2 pedidos FORA DO PADRÃO · R$ 215.000
+Produzem prazo médio concedido acima da meta de 90 dias.
+⛔ 1 deles acima de 180 dias — não permitido.
 
 • Carlos Eduardo Souza Lima · Móveis
   Pedido 998877 · R$ 95.000
-  Condição: 30/240
+  Condição: 30/210 → média 120d · +33% da meta
   Último venc.: 08/03 · 210 dias
-  🔺 Cliente em 120 dias · 33,3% acima da meta (90d)`,
-  },
-  {
-    chave: "politica_excecao",
-    titulo: "Exceção estratégica",
-    descricao:
-      "Pedido entre o prazo padrão e o teto. Não é proibido, mas precisa de decisão consciente — por isso aparece com cliente, valor e condição.",
-    quando: "Assim que a importação é confirmada",
-    momento: "importacao",
-    emoji: "⚠️",
-    padrao: true,
-    exemplo: `⚠️ 3 exceções estratégicas · R$ 225.000
-Prazo de recebimento entre 151 e 180 dias.
+  ⛔ Acima de 180 dias — não permitido
+  🔺 Cliente em 120 dias · 33,3% acima da meta (90d)
 
 • Fernanda Duarte de Oliveira · Móveis
   Pedido 442415 · R$ 120.000
-  Condição: 33/66/99/132/165
+  Condição: 30/165 → média 97d · +8% da meta
   Último venc.: 22/01 · 165 dias
   🔺 Cliente em 99 dias · 10% acima da meta (90d)`,
   },
@@ -84,7 +73,7 @@ Prazo de recebimento entre 151 e 180 dias.
     chave: "acordo_descumprido",
     titulo: "Pedido fora do acordo",
     descricao:
-      "O cliente tinha prazo combinado e o pedido novo passou dele. Vale mais que a exceção comum: aqui houve uma conversa que não foi respeitada.",
+      "O cliente tinha prazo combinado e o pedido novo passou dele. Vale mais que o alerta comum: aqui houve uma conversa que não foi respeitada.",
     quando: "Assim que a importação é confirmada",
     momento: "importacao",
     emoji: "🤝",

@@ -55,16 +55,40 @@ export function vencimentoCurto(iso: string | null | undefined): string {
  */
 export function linhaPedido(
   p: Pedido,
-  posicao?: { prazoCliente: number | null; desvio: DesvioMeta | null; meta: number }
+  posicao?: {
+    prazoCliente: number | null;
+    desvio: DesvioMeta | null;
+    meta: number;
+    /** Média que ESTE pedido produz, e quanto ela desvia da meta. */
+    mediaPedido?: number | null;
+    desvioPedido?: DesvioMeta | null;
+    /** "⛔ Acima de 180 dias — não permitido", quando for o caso. */
+    selo?: string | null;
+  }
 ): string {
+  // A condição já diz quanto o pedido empurra a média — é a leitura que
+  // conecta a régua do vencimento com a régua da meta.
+  const condicao = condicaoPagamento(p.prazosParcelas);
+  const media = posicao?.mediaPedido;
+  const desvioPedido = posicao?.desvioPedido;
+  const linhaCondicao =
+    media != null && desvioPedido
+      ? `  Condição: ${condicao} → média ${Math.round(media)}d · ${
+          desvioPedido.acimaDaMeta ? "+" : "−"
+        }${Math.abs(desvioPedido.percentual)
+          .toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% da meta`
+      : `  Condição: ${condicao}`;
+
   const linhas = [
     `• ${nomeCompleto(p.sacado)} · ${empresaCurta(p.empresa)}`,
     `  Pedido ${p.documento} · ${moedaCurta(p.valorTotal)}`,
-    `  Condição: ${condicaoPagamento(p.prazosParcelas)}`,
+    linhaCondicao,
     `  Último venc.: ${vencimentoCurto(p.ultimoVencimento)} · ${
-      p.prazo != null ? `${p.prazo}d` : "—"
+      p.prazo != null ? `${p.prazo} dias` : "—"
     }`,
   ];
+
+  if (posicao?.selo) linhas.push(`  ${posicao.selo}`);
 
   // Onde este cliente está em relação à meta — é o que diz se vale puxar
   // uma conversa de redução com ele.
@@ -72,7 +96,7 @@ export function linhaPedido(
     linhas.push(
       `  ${posicao.desvio.emoji} Cliente em ${
         Math.round(posicao.prazoCliente * 10) / 10
-      }d · ${posicao.desvio.texto} (${posicao.meta}d)`
+      } dias · ${posicao.desvio.texto} (${posicao.meta}d)`
     );
   }
   return linhas.join("\n");
