@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bell, BellOff, Eye, EyeOff, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Bell,
+  BellOff,
+  Eye,
+  EyeOff,
+  Loader2,
+  Send,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import {
@@ -38,8 +46,10 @@ export default function NotificacoesPage() {
   const [status, setStatus] = useState<StatusBot | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<ChaveNotificacao | null>(null);
+  const [enviandoFechamento, setEnviandoFechamento] = useState(false);
   const [aberto, setAberto] = useState<ChaveNotificacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   useEffect(() => {
     supabase
@@ -76,6 +86,7 @@ export default function NotificacoesPage() {
     setMapa(novo);
     setSalvando(chave);
     setErro(null);
+    setAviso(null);
     try {
       const { error } = configId
         ? await supabase
@@ -90,6 +101,35 @@ export default function NotificacoesPage() {
       setMapa(mapa); // desfaz
     } finally {
       setSalvando(null);
+    }
+  }
+
+  async function enviarFechamentoAgora() {
+    setEnviandoFechamento(true);
+    setErro(null);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/telegram/resumo", { method: "POST" }).then(
+        (x) => x.json()
+      );
+      if (r?.ok) {
+        setAviso(
+          `Avisos das 18h enviados para ${r.enviados} destinatário(s).`
+        );
+        return;
+      }
+
+      setErro(
+        r?.motivo === "sem_token"
+          ? "Bot sem token configurado."
+          : r?.motivo === "sem_destinatarios"
+            ? "Cadastre ao menos um destinatário antes."
+            : r?.motivo === "aviso_desligado"
+              ? "O aviso de fechamento do dia está desligado."
+              : r?.erro ?? "Não foi possível enviar os avisos das 18h."
+      );
+    } finally {
+      setEnviandoFechamento(false);
     }
   }
 
@@ -164,17 +204,43 @@ export default function NotificacoesPage() {
         </p>
       )}
 
+      {aviso && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+          {aviso}
+        </p>
+      )}
+
       {Array.from(porMomento.entries()).map(([momento, lista]) => (
         <Card key={momento}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{MOMENTOS[momento]}</CardTitle>
-            <CardDescription>
-              {momento === "importacao"
-                ? "Saem na hora em que alguém confirma uma importação."
-                : momento === "fechamento"
-                  ? "Saem uma vez por dia, às 18h."
-                  : "Saem quando alguém registra algo no sistema."}
-            </CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">{MOMENTOS[momento]}</CardTitle>
+                <CardDescription>
+                  {momento === "importacao"
+                    ? "Saem na hora em que alguém confirma uma importação."
+                    : momento === "fechamento"
+                      ? "Saem uma vez por dia, às 18h."
+                      : "Saem quando alguém registra algo no sistema."}
+                </CardDescription>
+              </div>
+              {momento === "fechamento" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!botOk || enviandoFechamento}
+                  onClick={enviarFechamentoAgora}
+                >
+                  {enviandoFechamento ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Enviar agora
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {lista.map((n) => {
