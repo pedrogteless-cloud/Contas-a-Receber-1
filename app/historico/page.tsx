@@ -22,13 +22,13 @@ import {
 } from "@/lib/boletos";
 import { prazoMedio } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
-import { descreverPrazo, hojeISO, situacaoVencimento } from "@/lib/tempo";
+import { hojeISO } from "@/lib/tempo";
 import { separarPorVencimento } from "@/lib/arquivo";
 import { corEmpresa } from "@/lib/theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda, ComAjuda } from "@/components/ajuda";
-import { DataRelativa } from "@/components/data-relativa";
+import { DataComPrazo } from "@/components/data-com-prazo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -407,7 +407,7 @@ export default function HistoricoPage() {
                         {formatarData(b.data_entrada)}
                       </TableCell>
                       <TableCell>
-                        <DataRelativa iso={b.data_vencimento} />
+                        <DataComPrazo iso={b.data_vencimento} />
                       </TableCell>
                       <TableCell className="text-center tabular-nums text-muted-foreground">
                         {b.prazo_dias ?? "—"}d

@@ -9,7 +9,6 @@ import {
   formatarMoeda,
   type Boleto,
 } from "./boletos";
-import { hojeISO } from "./tempo";
 import { agruparPedidos, type LimitesPrazo } from "./politica-prazo";
 
 const MESES_PT = [
@@ -118,33 +117,6 @@ export function estatisticasLimite(
       : 0;
   const valor = acima.reduce((s, b) => s + (b.valor ?? 0), 0);
   return { quantidade, percentual, valor };
-}
-
-export interface AVencer {
-  quantidade: number;
-  valor: number;
-}
-
-/** Boletos a vencer nos próximos `dias` (inclusive hoje). */
-export function aVencerEmDias(
-  boletos: Boleto[],
-  dias = 7,
-  refISO: string = hojeISO()
-): AVencer {
-  const ini = Date.parse(`${refISO}T00:00:00Z`);
-  const fim = ini + dias * 86400000;
-  let quantidade = 0;
-  let valor = 0;
-  for (const b of boletos) {
-    if (!b.data_vencimento) continue;
-    const v = Date.parse(`${b.data_vencimento}T00:00:00Z`);
-    if (Number.isNaN(v)) continue;
-    if (v >= ini && v <= fim) {
-      quantidade++;
-      valor += b.valor ?? 0;
-    }
-  }
-  return { quantidade, valor };
 }
 
 // ---------------------------------------------------------------------------
@@ -568,15 +540,6 @@ export function gerarInsights(
     );
   } else {
     insights.push(`Nenhum boleto acima de ${limites.normal} dias. 👍`);
-  }
-
-  const aVencer = aVencerEmDias(boletos, 7);
-  if (aVencer.quantidade > 0) {
-    insights.push(
-      `${aVencer.quantidade} boleto(s) a vencer em 7 dias, totalizando ${formatarMoeda(
-        aVencer.valor
-      )}.`
-    );
   }
 
   const top = topClientes(boletos, 1)[0];

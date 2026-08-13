@@ -18,7 +18,6 @@ import {
 } from "recharts";
 import {
   AlertTriangle,
-  CalendarClock,
   Gauge,
   Lightbulb,
   Wallet,
@@ -31,7 +30,6 @@ import {
 import { supabase } from "@/lib/supabase";
 import { formatarMoeda, type Boleto } from "@/lib/boletos";
 import {
-  aVencerEmDias,
   distribuicaoPorFaixa,
   estatisticasLimite,
   evolucaoPrazoConcedido,
@@ -52,7 +50,6 @@ import {
   lerLimites,
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
-import { dataPorExtenso, diasAte, hojeISO } from "@/lib/tempo";
 import { separarPorVencimento } from "@/lib/arquivo";
 import { CHART, corEmpresa, formatarCompacto } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
@@ -127,22 +124,6 @@ export default function DashboardPage() {
   const pmColchoes = prazoMedioPonderadoEmpresa(dados, "Ley Colchões");
   const total = valorTotal(dados);
   const est = estatisticasLimite(dados, limites);
-  const aVencer = aVencerEmDias(dados, 7);
-
-  // Contexto de tempo: o que já venceu e o que vence hoje.
-  const hoje = hojeISO();
-  const vencidos = useMemo(
-    () =>
-      dados.filter((b) => {
-        const d = diasAte(b.data_vencimento, hoje);
-        return d != null && d < 0;
-      }),
-    [dados, hoje]
-  );
-  const vencemHoje = useMemo(
-    () => dados.filter((b) => diasAte(b.data_vencimento, hoje) === 0),
-    [dados, hoje]
-  );
 
   const porEmpresa = useMemo(() => prazoMedioPorEmpresa(dados), [dados]);
   const participacao = useMemo(() => participacaoPorEmpresa(dados), [dados]);
@@ -218,7 +199,7 @@ export default function DashboardPage() {
 
       {carregando ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-28 rounded-lg" />
           ))}
         </div>
@@ -273,24 +254,6 @@ export default function DashboardPage() {
             icon={AlertTriangle}
             tom={est.quantidade > 0 ? "danger" : "success"}
             ajuda={AJUDA.acimaLimite}
-          />
-          <StatCard
-            label="A vencer em 7 dias"
-            value={String(aVencer.quantidade)}
-            hint={`${formatarMoeda(aVencer.valor)}${
-              vencemHoje.length > 0 ? ` · ${vencemHoje.length} vence(m) hoje` : ""
-            }`}
-            icon={CalendarClock}
-            tom="warning"
-            ajuda={AJUDA.aVencer7}
-          />
-          <StatCard
-            label="Já vencidos"
-            value={String(vencidos.length)}
-            hint={formatarMoeda(vencidos.reduce((s, b) => s + (b.valor ?? 0), 0))}
-            icon={CalendarClock}
-            tom={vencidos.length > 0 ? "danger" : "success"}
-            ajuda={AJUDA.vencidos}
           />
         </div>
       )}

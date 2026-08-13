@@ -56,10 +56,6 @@ export const AJUDA = {
     "Conta BOLETOS, um a um, cujo prazo passou do padrão (já com a tolerância). É diferente do bloco \"Política de prazo\", que conta PEDIDOS pelo vencimento do último título — por isso os dois números não batem, e não deveriam mesmo bater.",
   valorCarteira:
     "Soma do valor de todos os boletos filtrados — o total que ainda há a receber no recorte atual.",
-  aVencer7:
-    "Boletos que vencem de hoje até 7 dias à frente, com a soma dos valores. A data de referência é a de hoje, mostrada no topo da tela.",
-  vencidos:
-    "Boletos cuja data de vencimento já passou, considerando a data de hoje. Nas tabelas eles aparecem em vermelho, com há quanto tempo venceram.",
   faixaPrazo:
     "Distribuição dos boletos por faixa de prazo. As faixas acompanham a política, e a última é o que passou do teto — o não permitido. Ajuda a ver onde a carteira está concentrada.",
   evolucaoPrazo:

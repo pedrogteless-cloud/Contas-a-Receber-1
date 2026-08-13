@@ -49,7 +49,7 @@ import { useTheme } from "@/lib/use-theme";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
-import { DataRelativa } from "@/components/data-relativa";
+import { DataComPrazo } from "@/components/data-com-prazo";
 import { FiltroEmpresa } from "@/components/filtro-empresa";
 import { ChipToggle } from "@/components/chip-toggle";
 import {
@@ -435,7 +435,7 @@ export default function ClientesPage() {
                           {formatarMoeda(c.valor)}
                         </TableCell>
                         <TableCell>
-                          <DataRelativa iso={c.ultimoVencimento} />
+                          <DataComPrazo iso={c.ultimoVencimento} />
                         </TableCell>
                         <TableCell className="text-right">
                           <AcordoCliente

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Layers, Search, Wallet } from "lucide-react"
 
 import { supabase } from "@/lib/supabase";
 import {
+  calcularPrazoDias,
   documentoEParcela,
   formatarData,
   formatarMoeda,
@@ -25,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
-import { DataRelativa } from "@/components/data-relativa";
+import { DataComPrazo } from "@/components/data-com-prazo";
 import { FiltroEmpresa } from "@/components/filtro-empresa";
 import { ChipToggle } from "@/components/chip-toggle";
 import {
@@ -308,10 +309,13 @@ export default function VendasPage() {
                             {formatarMoeda(c.valorTotal)}
                           </TableCell>
                           <TableCell>
-                            <DataRelativa iso={c.primeiroVencimento} />
+                            <DataComPrazo
+                              iso={c.primeiroVencimento}
+                              dias={calcularPrazoDias(c.entrada, c.primeiroVencimento)}
+                            />
                           </TableCell>
                           <TableCell>
-                            <DataRelativa iso={c.ultimoVencimento} />
+                            <DataComPrazo iso={c.ultimoVencimento} dias={c.prazoUltima} />
                           </TableCell>
                           <TableCell className="text-right">
                             {c.prazoUltima != null ? (
@@ -371,7 +375,7 @@ export default function VendasPage() {
                                   {formatarData(b.data_entrada)}
                                 </TableCell>
                                 <TableCell>
-                                  <DataRelativa iso={b.data_vencimento} />
+                                  <DataComPrazo iso={b.data_vencimento} />
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <span
