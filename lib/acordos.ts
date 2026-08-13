@@ -34,6 +34,154 @@ export interface Acordo {
   registrado_por?: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Linha do tempo — como o prazo do cliente foi mudando
+// ---------------------------------------------------------------------------
+
+/**
+ * Uma renegociação registrada. `acordos_prazo` guarda só o estado ATUAL de
+ * cada cliente; esta tabela é append-only, e é dela que sai a linha do tempo.
+ */
+export interface AcordoHistorico {
+  id?: string;
+  cliente_chave: string;
+  cliente_nome: string;
+  condicao_anterior: string | null;
+  prazo_anterior: number | null;
+  condicao_nova: string | null;
+  prazo_novo: number | null;
+  observacao?: string | null;
+  registrado_por?: string | null;
+  criado_em: string;
+}
+
+/** Um estado do prazo do cliente: onde ele estava naquele momento. */
+export interface PontoLinhaTempo {
+  /** "Antes do 1º acordo", "1º acordo", "2º acordo"… */
+  rotulo: string;
+  condicao: string | null;
+  prazo: number | null;
+  /** ISO. Nulo no ponto de partida, que é um retrato sem data própria. */
+  data: string | null;
+  /** Diferença em dias para o ponto anterior (negativo = reduziu). */
+  variacao: number | null;
+  observacao?: string | null;
+  registrado_por?: string | null;
+}
+
+/**
+ * Monta a linha do tempo de um cliente a partir do histórico.
+ *
+ * O primeiro ponto é o retrato de ANTES do primeiro acordo — de onde o cliente
+ * partiu. Cada acordo seguinte vira um ponto novo. É isso que responde a
+ * pergunta "como era, e como ficou depois de cada conversa".
+ */
+export function linhaDoTempo(historico: AcordoHistorico[]): PontoLinhaTempo[] {
+  const ordenado = [...historico].sort((a, b) =>
+    (a.criado_em ?? "").localeCompare(b.criado_em ?? "")
+  );
+  if (ordenado.length === 0) return [];
+
+  const pontos: PontoLinhaTempo[] = [
+    {
+      rotulo: "Antes do 1º acordo",
+      condicao: ordenado[0].condicao_anterior,
+      prazo: ordenado[0].prazo_anterior,
+      data: null,
+      variacao: null,
+    },
+  ];
+
+  ordenado.forEach((h, i) => {
+    const anterior = pontos[pontos.length - 1];
+    pontos.push({
+      rotulo: `${i + 1}º acordo`,
+      condicao: h.condicao_nova,
+      prazo: h.prazo_novo,
+      data: h.criado_em,
+      variacao:
+        typeof h.prazo_novo === "number" && typeof anterior.prazo === "number"
+          ? h.prazo_novo - anterior.prazo
+          : null,
+      observacao: h.observacao,
+      registrado_por: h.registrado_por,
+    });
+  });
+
+  return pontos;
+}
+
+/** O saldo da negociação com um cliente, do primeiro retrato até hoje. */
+export interface ResultadoAcordo {
+  /** Quantas renegociações já foram registradas. */
+  rodadas: number;
+  prazoInicial: number | null;
+  prazoAtual: number | null;
+  condicaoInicial: string | null;
+  condicaoAtual: string | null;
+  /** Dias cortados (positivo = reduziu). */
+  reducaoDias: number | null;
+  /** 0-100. */
+  reducaoPercentual: number | null;
+  /** O acordo trouxe o cliente de fora para dentro do padrão. */
+  entrouNoPadrao: boolean;
+}
+
+/**
+ * Resume o que os acordos com um cliente produziram.
+ *
+ * `entrouNoPadrao` é a observação que interessa na leitura rápida: o cliente
+ * estava acima do teto e, por causa da conversa, passou a caber nele. Vale a
+ * pena marcar porque é trabalho que deu resultado — e não aparece em nenhum
+ * lugar olhando só o prazo de hoje.
+ */
+export function resultadoAcordo(
+  historico: AcordoHistorico[],
+  limites: LimitesPrazo
+): ResultadoAcordo | null {
+  const pontos = linhaDoTempo(historico);
+  if (pontos.length < 2) return null;
+
+  const inicial = pontos[0];
+  const atual = pontos[pontos.length - 1];
+  const teto = limites.normal + limites.tolerancia;
+
+  const reducaoDias =
+    typeof inicial.prazo === "number" && typeof atual.prazo === "number"
+      ? inicial.prazo - atual.prazo
+      : null;
+
+  return {
+    rodadas: pontos.length - 1,
+    prazoInicial: inicial.prazo,
+    prazoAtual: atual.prazo,
+    condicaoInicial: inicial.condicao,
+    condicaoAtual: atual.condicao,
+    reducaoDias,
+    reducaoPercentual:
+      reducaoDias != null && typeof inicial.prazo === "number" && inicial.prazo > 0
+        ? Math.round((reducaoDias / inicial.prazo) * 1000) / 10
+        : null,
+    entrouNoPadrao:
+      typeof inicial.prazo === "number" &&
+      typeof atual.prazo === "number" &&
+      inicial.prazo > teto &&
+      atual.prazo <= teto,
+  };
+}
+
+/** Indexa o histórico por chave de cliente. */
+export function indexarHistorico(
+  historico: AcordoHistorico[]
+): Map<string, AcordoHistorico[]> {
+  const mapa = new Map<string, AcordoHistorico[]>();
+  for (const h of historico) {
+    if (!mapa.has(h.cliente_chave)) mapa.set(h.cliente_chave, []);
+    mapa.get(h.cliente_chave)!.push(h);
+  }
+  return mapa;
+}
+
 /**
  * Lê uma condição de pagamento escrita à mão.
  *

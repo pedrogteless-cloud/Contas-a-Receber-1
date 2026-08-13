@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -12,7 +12,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, Search, Users, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Handshake,
+  Search,
+  Users,
+  Wallet,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import {
@@ -32,7 +40,10 @@ import {
   chaveCliente,
   condicaoPraticada,
   indexarAcordos,
+  indexarHistorico,
+  resultadoAcordo,
   type Acordo,
+  type AcordoHistorico,
 } from "@/lib/acordos";
 import {
   LIMITES_PADRAO,
@@ -42,6 +53,7 @@ import {
   type LimitesPrazo,
 } from "@/lib/politica-prazo";
 import { AcordoCliente } from "@/components/acordo-cliente";
+import { LinhaDoTempoAcordo } from "@/components/linha-do-tempo-acordo";
 import { separarPorVencimento } from "@/lib/arquivo";
 import { CHART, corEmpresa } from "@/lib/theme";
 import { useMounted } from "@/lib/use-mounted";
@@ -90,7 +102,10 @@ export default function ClientesPage() {
   const teto = limites.normal + limites.tolerancia;
   const [carregando, setCarregando] = useState(true);
   const [acordos, setAcordos] = useState<Acordo[]>([]);
+  const [historico, setHistorico] = useState<AcordoHistorico[]>([]);
+  const [aberto, setAberto] = useState<string | null>(null);
   const indice = useMemo(() => indexarAcordos(acordos), [acordos]);
+  const indiceHistorico = useMemo(() => indexarHistorico(historico), [historico]);
   // Base para o "antes" do acordo: o sistema descobre sozinho a condição que
   // cada cliente vinha praticando, sem ninguém digitar.
   const pedidos = useMemo(() => agruparPedidos(boletos), [boletos]);
@@ -117,6 +132,13 @@ export default function ClientesPage() {
     );
   }
 
+  const recarregarHistorico = useCallback(() => {
+    supabase
+      .from("acordos_historico")
+      .select("*")
+      .then(({ data }) => setHistorico((data ?? []) as AcordoHistorico[]));
+  }, []);
+
   useEffect(() => {
     Promise.all([
       supabase.from("boletos").select("*"),
@@ -126,10 +148,12 @@ export default function ClientesPage() {
         .limit(1)
         .maybeSingle(),
       supabase.from("acordos_prazo").select("*"),
-    ]).then(([b, c, a]) => {
+      supabase.from("acordos_historico").select("*"),
+    ]).then(([b, c, a, h]) => {
       setBoletos(separarPorVencimento((b.data ?? []) as Boleto[]).ativos);
       setLimites(lerLimites(c.data));
       setAcordos((a.data ?? []) as Acordo[]);
+      setHistorico((h.data ?? []) as AcordoHistorico[]);
       setCarregando(false);
     });
   }, []);
@@ -340,6 +364,7 @@ export default function ClientesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8"></TableHead>
                     <ThOrdenavel campo="sacado" ordenacao={ordenacao} onOrdenar={ordenarPor}>
                       Cliente
                     </ThOrdenavel>
@@ -362,10 +387,54 @@ export default function ClientesPage() {
                 <TableBody>
                   {clientes.map((c) => {
                     const alto = c.prazoMedio != null && c.prazoMedio > teto;
+                    const chave = chaveCliente(c.sacado);
+                    const hist = indiceHistorico.get(chave) ?? [];
+                    const resultado = resultadoAcordo(hist, limites);
+                    const expandido = aberto === c.sacado;
                     return (
-                      <TableRow key={c.sacado}>
-                        <TableCell className="max-w-[240px] truncate font-medium" title={c.sacado}>
-                          {c.sacado}
+                      <Fragment key={c.sacado}>
+                      <TableRow
+                        className={hist.length > 0 ? "cursor-pointer" : undefined}
+                        onClick={
+                          hist.length > 0
+                            ? () => setAberto(expandido ? null : c.sacado)
+                            : undefined
+                        }
+                      >
+                        <TableCell>
+                          {hist.length > 0 &&
+                            (expandido ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            ))}
+                        </TableCell>
+                        <TableCell className="max-w-[240px] font-medium" title={c.sacado}>
+                          <span className="block truncate">{c.sacado}</span>
+                          {resultado && (
+                            <span
+                              className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground"
+                              title={
+                                resultado.entrouNoPadrao
+                                  ? `Estava em ${resultado.prazoInicial}d e entrou no padrão depois de ${resultado.rodadas} acordo(s). Clique para ver a linha do tempo.`
+                                  : `${resultado.rodadas} acordo(s) registrado(s). Clique para ver a linha do tempo.`
+                              }
+                            >
+                              <Handshake className="h-3 w-3" />
+                              {resultado.rodadas}x
+                              {resultado.reducaoDias != null &&
+                                resultado.reducaoDias > 0 && (
+                                  <span className="text-emerald-600 dark:text-emerald-400">
+                                    −{resultado.reducaoDias}d
+                                  </span>
+                                )}
+                              {resultado.entrouNoPadrao && (
+                                <span className="rounded bg-emerald-500/15 px-1 text-emerald-700 dark:text-emerald-400">
+                                  ✅ entrou no padrão
+                                </span>
+                              )}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -440,18 +509,38 @@ export default function ClientesPage() {
                         <TableCell>
                           <DataComPrazo iso={c.ultimoVencimento} />
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <AcordoCliente
                             nome={c.sacado}
-                            acordo={indice.get(chaveCliente(c.sacado))}
+                            acordo={indice.get(chave)}
                             anterior={condicaoPraticada(pedidos, c.sacado)}
                             valorCarteira={c.valor}
-                            aoSalvar={(a) =>
-                              aplicarAcordo(chaveCliente(c.sacado), a)
-                            }
+                            aoSalvar={(a) => aplicarAcordo(chave, a)}
+                            aoRegistrarHistorico={recarregarHistorico}
                           />
                         </TableCell>
                       </TableRow>
+
+                      {expandido && (
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell></TableCell>
+                          <TableCell colSpan={8} className="py-4">
+                            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Linha do tempo do prazo · {c.sacado}
+                            </p>
+                            <div className="overflow-x-auto scroll-thin">
+                              <LinhaDoTempoAcordo
+                                historico={hist}
+                                limites={limites}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </TableBody>

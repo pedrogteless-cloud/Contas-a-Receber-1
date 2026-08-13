@@ -26,6 +26,7 @@ export function AcordoCliente({
   anterior,
   valorCarteira,
   aoSalvar,
+  aoRegistrarHistorico,
 }: {
   nome: string;
   acordo: Acordo | undefined;
@@ -33,6 +34,8 @@ export function AcordoCliente({
   anterior: { condicao: string | null; prazo: number | null };
   valorCarteira?: number;
   aoSalvar: (a: Acordo | null) => void;
+  /** Avisa a tela para recarregar a linha do tempo depois de um degrau novo. */
+  aoRegistrarHistorico?: () => void;
 }) {
   const [editando, setEditando] = useState(false);
   const [condicao, setCondicao] = useState<string>(
@@ -65,6 +68,13 @@ export function AcordoCliente({
         updated_at: new Date().toISOString(),
       };
 
+      // De onde este acordo está partindo: o prazo que valia até agora. Na
+      // primeira vez é o retrato do que o cliente praticava; nas seguintes, o
+      // acordo anterior — é isso que faz a linha do tempo ter degraus.
+      const prazoPartida = acordo?.prazo_acordado ?? anterior.prazo;
+      const condicaoPartida =
+        acordo?.condicao_acordada ?? acordo?.condicao_anterior ?? anterior.condicao;
+
       const { data, error } = await supabase
         .from("acordos_prazo")
         .upsert(registro, { onConflict: "cliente_chave" })
@@ -73,6 +83,28 @@ export function AcordoCliente({
       if (error) throw error;
 
       const salvo = data as Acordo;
+
+      // Só registra na linha do tempo quando o PRAZO muda. Ligar/desligar o
+      // sino não é renegociação e não merece um degrau no histórico.
+      const mudouPrazo =
+        campos.prazo_acordado !== undefined &&
+        campos.prazo_acordado !== prazoPartida;
+      if (mudouPrazo) {
+        const { error: erroHist } = await supabase
+          .from("acordos_historico")
+          .insert({
+            cliente_chave: chave,
+            cliente_nome: nome,
+            condicao_anterior: condicaoPartida ?? null,
+            prazo_anterior: prazoPartida ?? null,
+            condicao_nova: salvo.condicao_acordada ?? null,
+            prazo_novo: salvo.prazo_acordado ?? null,
+          });
+        // O acordo já está gravado; falhar o histórico não pode desfazê-lo.
+        if (erroHist) console.error("[acordo] histórico não gravado:", erroHist);
+        else aoRegistrarHistorico?.();
+      }
+
       aoSalvar(salvo);
       setEditando(false);
 

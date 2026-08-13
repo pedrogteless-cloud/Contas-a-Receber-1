@@ -28,7 +28,7 @@ import {
   type Ordenacao,
   type OpcoesRelatorio,
 } from "@/lib/relatorio-excel";
-import type { Acordo } from "@/lib/acordos";
+import type { Acordo, AcordoHistorico } from "@/lib/acordos";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
@@ -54,10 +54,11 @@ import {
 } from "@/components/ui/select";
 
 const ABAS: { chave: AbaRelatorio; rotulo: string; descricao: string }[] = [
-  { chave: "resumo", rotulo: "📊 Resumo", descricao: "KPIs da carteira, por empresa" },
+  { chave: "resumo", rotulo: "📊 Resumo", descricao: "Painel de KPIs, por empresa e por status" },
   { chave: "clientes", rotulo: "👥 Clientes", descricao: "Um cliente por linha" },
   { chave: "vendas", rotulo: "🧾 DAVs", descricao: "Uma venda por linha" },
   { chave: "boletos", rotulo: "📄 Boletos", descricao: "Cada título, um a um" },
+  { chave: "acordos", rotulo: "🤝 Acordos", descricao: "Linha do tempo do prazo de cada cliente" },
 ];
 
 const AJUDA_RELATORIO =
@@ -66,6 +67,7 @@ const AJUDA_RELATORIO =
 export default function RelatoriosPage() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [acordos, setAcordos] = useState<Acordo[]>([]);
+  const [historico, setHistorico] = useState<AcordoHistorico[]>([]);
   const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
   const [carregando, setCarregando] = useState(true);
   const [gerando, setGerando] = useState(false);
@@ -78,6 +80,7 @@ export default function RelatoriosPage() {
     clientes: true,
     vendas: true,
     boletos: true,
+    acordos: true,
   });
   const [agrupar, setAgrupar] = useState<Agrupamento>("cliente");
   const [ordenar, setOrdenar] = useState<Ordenacao>("valor");
@@ -87,10 +90,12 @@ export default function RelatoriosPage() {
       supabase.from("boletos").select("*"),
       supabase.from("configuracoes").select("*").limit(1).maybeSingle(),
       supabase.from("acordos_prazo").select("*"),
-    ]).then(([b, c, a]) => {
+      supabase.from("acordos_historico").select("*"),
+    ]).then(([b, c, a, h]) => {
       setBoletos(separarPorVencimento((b.data ?? []) as Boleto[]).ativos);
       setLimites(lerLimites(c.data));
       setAcordos((a.data ?? []) as Acordo[]);
+      setHistorico((h.data ?? []) as AcordoHistorico[]);
       setCarregando(false);
     });
   }, []);
@@ -142,7 +147,13 @@ export default function RelatoriosPage() {
         ordenar,
         filtroDescricao: descreverFiltro(),
       };
-      const buffer = await gerarRelatorioExcel(dados, limites, acordos, opcoes);
+      const buffer = await gerarRelatorioExcel(
+        dados,
+        limites,
+        acordos,
+        historico,
+        opcoes
+      );
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
