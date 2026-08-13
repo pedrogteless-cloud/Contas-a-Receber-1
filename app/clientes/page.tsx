@@ -50,6 +50,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
 import { DataRelativa } from "@/components/data-relativa";
+import { FiltroEmpresa } from "@/components/filtro-empresa";
 import {
   Card,
   CardContent,
@@ -76,13 +77,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-const OPCOES_EMPRESA = [
-  "Todas",
-  "Ley Móveis",
-  "Ley Colchões",
-  "Não classificado",
-] as const;
 
 type Ordem = "valor" | "prazo" | "acima";
 
@@ -186,18 +180,7 @@ export default function ClientesPage() {
       >
         <div className="space-y-1">
           <Label className="text-xs">Empresa</Label>
-          <Select value={empresa} onValueChange={setEmpresa}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {OPCOES_EMPRESA.map((e) => (
-                <SelectItem key={e} value={e}>
-                  {e}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FiltroEmpresa valor={empresa} onChange={setEmpresa} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Ordenar por</Label>
