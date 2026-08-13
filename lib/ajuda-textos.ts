@@ -16,6 +16,8 @@ export const AJUDA = {
     "Agrupa os boletos da mesma venda a prazo. Ex.: uma venda de R$ 10.000 em 4x aparece como uma linha só, com as 4 parcelas e o prazo de recebimento total.",
   abaHistorico:
     "Todas as importações já feitas, com filtros por data, empresa e cliente, e a lista dos boletos acima do limite.",
+  abaRelatorios:
+    "Monta e baixa uma planilha Excel com o recorte que você escolher: abas de resumo, clientes, DAVs e boletos, agrupadas e coloridas por status, com filtro em cada coluna.",
   abaNotificacoes:
     "Todos os avisos que o sistema manda no Telegram, com liga/desliga e o exemplo de cada mensagem. Serve para saber o que está ativo sem precisar perguntar a ninguém.",
   abaConfiguracoes:

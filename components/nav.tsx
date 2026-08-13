@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bell,
+  FileSpreadsheet,
   FileUp,
   LayoutDashboard,
   History,
@@ -52,6 +53,12 @@ const LINKS: LinkNav[] = [
     label: "Histórico",
     icon: History,
     ajuda: AJUDA.abaHistorico,
+  },
+  {
+    href: "/relatorios",
+    label: "Relatórios",
+    icon: FileSpreadsheet,
+    ajuda: AJUDA.abaRelatorios,
   },
   {
     href: "/notificacoes",
