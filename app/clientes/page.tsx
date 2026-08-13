@@ -51,6 +51,12 @@ import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
 import { DataRelativa } from "@/components/data-relativa";
 import { FiltroEmpresa } from "@/components/filtro-empresa";
+import { ChipToggle } from "@/components/chip-toggle";
+import {
+  ThOrdenavel,
+  alternarOrdenacao,
+  type Ordenacao,
+} from "@/components/th-ordenavel";
 import {
   Card,
   CardContent,
@@ -63,13 +69,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -78,7 +77,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type Ordem = "valor" | "prazo" | "acima";
+type CampoOrdemCliente = "sacado" | "prazoMedio" | "valor" | "percentualAcima";
 
 export default function ClientesPage() {
   const mounted = useMounted();
@@ -103,7 +102,17 @@ export default function ClientesPage() {
 
   const [busca, setBusca] = useState("");
   const [empresa, setEmpresa] = useState<string>("Todas");
-  const [ordem, setOrdem] = useState<Ordem>("valor");
+  const [soForaDoPadrao, setSoForaDoPadrao] = useState(false);
+  const [ordenacao, setOrdenacao] = useState<Ordenacao<CampoOrdemCliente>>({
+    campo: "valor",
+    direcao: "desc",
+  });
+
+  function ordenarPor(campo: CampoOrdemCliente) {
+    setOrdenacao((atual) =>
+      alternarOrdenacao(atual, campo, campo === "sacado" ? "asc" : "desc")
+    );
+  }
 
   useEffect(() => {
     Promise.all([
@@ -135,13 +144,18 @@ export default function ClientesPage() {
     const termo = busca.trim().toLowerCase();
     let r = resumoClientes(filtradosBase, limite);
     if (termo) r = r.filter((c) => c.sacado.toLowerCase().includes(termo));
-    const cmp: Record<Ordem, (a: (typeof r)[0], b: (typeof r)[0]) => number> = {
-      valor: (a, b) => b.valor - a.valor,
-      prazo: (a, b) => (b.prazoMedio ?? -1) - (a.prazoMedio ?? -1),
-      acima: (a, b) => b.percentualAcima - a.percentualAcima,
+    if (soForaDoPadrao)
+      r = r.filter((c) => desvioDaMeta(c.prazoMedio, limites.meta)?.acimaDaMeta);
+
+    const dir = ordenacao.direcao === "asc" ? 1 : -1;
+    const cmp: Record<CampoOrdemCliente, (a: (typeof r)[0], b: (typeof r)[0]) => number> = {
+      sacado: (a, b) => a.sacado.localeCompare(b.sacado, "pt-BR"),
+      valor: (a, b) => a.valor - b.valor,
+      prazoMedio: (a, b) => (a.prazoMedio ?? -1) - (b.prazoMedio ?? -1),
+      percentualAcima: (a, b) => a.percentualAcima - b.percentualAcima,
     };
-    return [...r].sort(cmp[ordem]);
-  }, [filtradosBase, busca, limite, ordem]);
+    return [...r].sort((a, b) => dir * cmp[ordenacao.campo](a, b));
+  }, [filtradosBase, busca, limite, limites.meta, soForaDoPadrao, ordenacao]);
 
   const totalCarteira = valorTotal(filtradosBase);
   const pmGeral = prazoMedioPonderado(filtradosBase);
@@ -181,19 +195,6 @@ export default function ClientesPage() {
         <div className="space-y-1">
           <Label className="text-xs">Empresa</Label>
           <FiltroEmpresa valor={empresa} onChange={setEmpresa} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Ordenar por</Label>
-          <Select value={ordem} onValueChange={(v) => setOrdem(v as Ordem)}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="valor">Valor em carteira</SelectItem>
-              <SelectItem value="prazo">Prazo médio</SelectItem>
-              <SelectItem value="acima">% acima do limite</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </PageHeader>
 
@@ -305,14 +306,22 @@ export default function ClientesPage() {
               <CardTitle className="text-base">Todos os clientes</CardTitle>
               <CardDescription>{clientes.length} cliente(s)</CardDescription>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder="Buscar cliente"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <ChipToggle
+                ativo={soForaDoPadrao}
+                onClick={() => setSoForaDoPadrao((v) => !v)}
+              >
+                🚨 Fora do padrão
+              </ChipToggle>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Buscar cliente"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -328,13 +337,21 @@ export default function ClientesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Cliente</TableHead>
+                    <ThOrdenavel campo="sacado" ordenacao={ordenacao} onOrdenar={ordenarPor}>
+                      Cliente
+                    </ThOrdenavel>
                     <TableHead>Empresa</TableHead>
                     <TableHead className="text-right">Boletos</TableHead>
-                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo concedido<Ajuda titulo="Prazo médio concedido" texto={AJUDA.prazoMedio} /></span></TableHead>
+                    <ThOrdenavel campo="prazoMedio" ordenacao={ordenacao} onOrdenar={ordenarPor} align="right">
+                      <span className="inline-flex items-center gap-1">Prazo concedido<Ajuda titulo="Prazo médio concedido" texto={AJUDA.prazoMedio} /></span>
+                    </ThOrdenavel>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Vs. meta<Ajuda titulo="Meta de prazo médio concedido" texto={AJUDA.metaPrazoMedio} /></span></TableHead>
-                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acima do limite<Ajuda titulo="Acima do limite" texto={AJUDA.acimaLimite} /></span></TableHead>
-                    <TableHead className="text-right">Valor em carteira</TableHead>
+                    <ThOrdenavel campo="percentualAcima" ordenacao={ordenacao} onOrdenar={ordenarPor} align="right">
+                      <span className="inline-flex items-center gap-1">Acima do limite<Ajuda titulo="Acima do limite" texto={AJUDA.acimaLimite} /></span>
+                    </ThOrdenavel>
+                    <ThOrdenavel campo="valor" ordenacao={ordenacao} onOrdenar={ordenarPor} align="right">
+                      Valor em carteira
+                    </ThOrdenavel>
                     <TableHead>Últ. vencimento</TableHead>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Acordo<Ajuda titulo="Acordo de prazo" texto={AJUDA.acordoCliente} /></span></TableHead>
                   </TableRow>

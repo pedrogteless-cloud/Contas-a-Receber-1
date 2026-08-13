@@ -10,7 +10,7 @@ import {
   formatarMoeda,
   type Boleto,
 } from "@/lib/boletos";
-import { agruparVendas, prazoMedioPonderado } from "@/lib/analytics";
+import { agruparVendas } from "@/lib/analytics";
 import { AJUDA } from "@/lib/ajuda-textos";
 import {
   LIMITES_PADRAO,
@@ -27,6 +27,12 @@ import { StatCard } from "@/components/stat-card";
 import { Ajuda } from "@/components/ajuda";
 import { DataRelativa } from "@/components/data-relativa";
 import { FiltroEmpresa } from "@/components/filtro-empresa";
+import { ChipToggle } from "@/components/chip-toggle";
+import {
+  ThOrdenavel,
+  alternarOrdenacao,
+  type Ordenacao,
+} from "@/components/th-ordenavel";
 import {
   Card,
   CardContent,
@@ -54,6 +60,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+type CampoOrdemVenda = "sacado" | "valorTotal" | "prazoUltima";
+
 export default function VendasPage() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
@@ -63,7 +71,18 @@ export default function VendasPage() {
   const [busca, setBusca] = useState("");
   const [empresa, setEmpresa] = useState<string>("Todas");
   const [soParceladas, setSoParceladas] = useState(false);
+  const [soForaDoPadrao, setSoForaDoPadrao] = useState(false);
+  const [ordenacao, setOrdenacao] = useState<Ordenacao<CampoOrdemVenda>>({
+    campo: "valorTotal",
+    direcao: "desc",
+  });
   const [aberta, setAberta] = useState<string | null>(null);
+
+  function ordenarPor(campo: CampoOrdemVenda) {
+    setOrdenacao((atual) =>
+      alternarOrdenacao(atual, campo, campo === "sacado" ? "asc" : "desc")
+    );
+  }
 
   useEffect(() => {
     Promise.all([
@@ -84,7 +103,12 @@ export default function VendasPage() {
     const base = boletos.filter((b) =>
       empresa === "Todas" ? true : (b.empresa || "Não classificado") === empresa
     );
-    let lista = agruparVendas(base, limite);
+    // O status é do pedido, pela mesma régua da meta — calculado uma vez
+    // aqui, e reaproveitado na tabela e no filtro "Fora do padrão".
+    let lista = agruparVendas(base, limite).map((c) => ({
+      ...c,
+      status: classificarPedido(c.prazoMedio, c.prazoUltima, limites),
+    }));
 
     const termo = busca.trim().toLowerCase();
     if (termo) {
@@ -95,8 +119,16 @@ export default function VendasPage() {
       );
     }
     if (soParceladas) lista = lista.filter((c) => c.parcelas > 1);
-    return lista;
-  }, [boletos, empresa, limite, busca, soParceladas]);
+    if (soForaDoPadrao) lista = lista.filter((c) => c.status !== "normal");
+
+    const dir = ordenacao.direcao === "asc" ? 1 : -1;
+    const cmp: Record<CampoOrdemVenda, (a: (typeof lista)[0], b: (typeof lista)[0]) => number> = {
+      sacado: (a, b) => a.sacado.localeCompare(b.sacado, "pt-BR"),
+      valorTotal: (a, b) => a.valorTotal - b.valorTotal,
+      prazoUltima: (a, b) => (a.prazoUltima ?? -1) - (b.prazoUltima ?? -1),
+    };
+    return [...lista].sort((a, b) => dir * cmp[ordenacao.campo](a, b));
+  }, [boletos, empresa, limite, limites, busca, soParceladas, soForaDoPadrao, ordenacao]);
 
   const totalVendas = vendas.length;
   const parceladas = vendas.filter((c) => c.parcelas > 1).length;
@@ -174,14 +206,22 @@ export default function VendasPage() {
                 Clique numa linha para ver as parcelas.
               </CardDescription>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder="Cliente ou nº do documento"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <ChipToggle
+                ativo={soForaDoPadrao}
+                onClick={() => setSoForaDoPadrao((v) => !v)}
+              >
+                🚨 Fora do padrão
+              </ChipToggle>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Cliente ou nº do documento"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -198,15 +238,21 @@ export default function VendasPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8"></TableHead>
-                    <TableHead>Cliente</TableHead>
+                    <ThOrdenavel campo="sacado" ordenacao={ordenacao} onOrdenar={ordenarPor}>
+                      Cliente
+                    </ThOrdenavel>
                     <TableHead>Empresa</TableHead>
                     <TableHead>Documento</TableHead>
                     <TableHead className="text-center">Parcelas</TableHead>
                     <TableHead className="text-right">Valor da parcela</TableHead>
-                    <TableHead className="text-right">Valor total</TableHead>
+                    <ThOrdenavel campo="valorTotal" ordenacao={ordenacao} onOrdenar={ordenarPor} align="right">
+                      Valor total
+                    </ThOrdenavel>
                     <TableHead>1º venc.</TableHead>
                     <TableHead>Último venc.</TableHead>
-                    <TableHead className="text-right"><span className="inline-flex items-center gap-1">Prazo receb.<Ajuda titulo="Prazo de recebimento" texto={AJUDA.prazoRecebimento} /></span></TableHead>
+                    <ThOrdenavel campo="prazoUltima" ordenacao={ordenacao} onOrdenar={ordenarPor} align="right">
+                      <span className="inline-flex items-center gap-1">Prazo receb.<Ajuda titulo="Prazo de recebimento" texto={AJUDA.prazoRecebimento} /></span>
+                    </ThOrdenavel>
                     <TableHead className="text-right"><span className="inline-flex items-center gap-1">Status<Ajuda titulo="Política de prazo" texto={AJUDA.politicaPrazo} /></span></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -281,25 +327,17 @@ export default function VendasPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {(() => {
-                              // A regra é o desvio da META, medido sobre a
-                              // média real da venda — não sobre a última parcela.
-                              const st = classificarPedido(
-                                prazoMedioPonderado(c.boletos),
-                                c.prazoUltima,
-                                limites
-                              );
-                              if (!st) return "—";
-                              return (
-                                <Badge
-                                  variant={
-                                    st === "normal" ? "success" : "destructive"
-                                  }
-                                >
-                                  {STATUS[st].emoji} {STATUS[st].curto}
-                                </Badge>
-                              );
-                            })()}
+                            {c.status ? (
+                              <Badge
+                                variant={
+                                  c.status === "normal" ? "success" : "destructive"
+                                }
+                              >
+                                {STATUS[c.status].emoji} {STATUS[c.status].curto}
+                              </Badge>
+                            ) : (
+                              "—"
+                            )}
                           </TableCell>
                         </TableRow>
 
