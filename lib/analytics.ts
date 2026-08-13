@@ -377,8 +377,9 @@ export interface ClienteDetalhe {
 
 export function resumoClientes(
   boletos: Boleto[],
-  limite: number
+  limites: LimitesPrazo
 ): ClienteDetalhe[] {
+  const teto = limites.normal + limites.tolerancia;
   const grupos = new Map<string, Boleto[]>();
   for (const b of boletos) {
     const chave = b.sacado || "—";
@@ -389,7 +390,7 @@ export function resumoClientes(
   return Array.from(grupos.entries())
     .map(([sacado, lista]) => {
       const acima = lista.filter(
-        (b) => typeof b.prazo_dias === "number" && b.prazo_dias > limite
+        (b) => typeof b.prazo_dias === "number" && b.prazo_dias > teto
       ).length;
       const vencs = lista
         .map((b) => b.data_vencimento)

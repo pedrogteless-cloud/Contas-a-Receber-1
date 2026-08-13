@@ -67,6 +67,9 @@ export default function VendasPage() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
   const limite = limites.normal;
+  // Com tolerância: sem isso, um prazo dentro da folga de calendário
+  // aparecia vermelho mesmo passando na política (Status ao lado dizia OK).
+  const teto = limites.normal + limites.tolerancia;
   const [carregando, setCarregando] = useState(true);
 
   const [busca, setBusca] = useState("");
@@ -106,7 +109,7 @@ export default function VendasPage() {
     );
     // O status é do pedido, pela mesma régua da meta — calculado uma vez
     // aqui, e reaproveitado na tabela e no filtro "Fora do padrão".
-    let lista = agruparVendas(base, limite).map((c) => ({
+    let lista = agruparVendas(base, teto).map((c) => ({
       ...c,
       status: classificarPedido(c.prazoMedio, c.prazoUltima, limites),
     }));
@@ -129,7 +132,7 @@ export default function VendasPage() {
       prazoUltima: (a, b) => (a.prazoUltima ?? -1) - (b.prazoUltima ?? -1),
     };
     return [...lista].sort((a, b) => dir * cmp[ordenacao.campo](a, b));
-  }, [boletos, empresa, limite, limites, busca, soParceladas, soForaDoPadrao, ordenacao]);
+  }, [boletos, empresa, teto, limites, busca, soParceladas, soForaDoPadrao, ordenacao]);
 
   const totalVendas = vendas.length;
   const parceladas = vendas.filter((c) => c.parcelas > 1).length;
@@ -321,7 +324,7 @@ export default function VendasPage() {
                             {c.prazoUltima != null ? (
                               <Badge
                                 variant={
-                                  c.prazoUltima > limite ? "destructive" : "success"
+                                  c.prazoUltima > teto ? "destructive" : "success"
                                 }
                               >
                                 {c.prazoUltima}d
@@ -349,7 +352,7 @@ export default function VendasPage() {
                           c.boletos.map((b) => {
                             const { parcela } = documentoEParcela(b.seu_numero);
                             const acima =
-                              b.prazo_dias != null && b.prazo_dias > limite;
+                              b.prazo_dias != null && b.prazo_dias > teto;
                             return (
                               <TableRow
                                 key={b.id}

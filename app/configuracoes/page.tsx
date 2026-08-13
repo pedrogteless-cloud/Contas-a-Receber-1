@@ -407,7 +407,7 @@ export default function ConfiguracoesPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="tolerancia" className="flex items-center gap-1.5">Tolerância (dias)<Ajuda titulo="Tolerância de calendário" texto={AJUDA.tolerancia} /></Label>
+              <Label htmlFor="tolerancia" className="flex items-center gap-1.5">Tolerância (dias)<Ajuda titulo="Tolerância" texto={AJUDA.tolerancia} /></Label>
               <Input
                 id="tolerancia"
                 type="number"

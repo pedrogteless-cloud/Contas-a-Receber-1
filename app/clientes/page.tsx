@@ -85,6 +85,9 @@ export default function ClientesPage() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [limites, setLimites] = useState<LimitesPrazo>(LIMITES_PADRAO);
   const limite = limites.normal;
+  // O teto visual leva a tolerância junto — sem isso, um prazo dentro da
+  // folga de calendário aparecia vermelho mesmo passando na política.
+  const teto = limites.normal + limites.tolerancia;
   const [carregando, setCarregando] = useState(true);
   const [acordos, setAcordos] = useState<Acordo[]>([]);
   const indice = useMemo(() => indexarAcordos(acordos), [acordos]);
@@ -142,7 +145,7 @@ export default function ClientesPage() {
 
   const clientes = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    let r = resumoClientes(filtradosBase, limite);
+    let r = resumoClientes(filtradosBase, limites);
     if (termo) r = r.filter((c) => c.sacado.toLowerCase().includes(termo));
     if (soForaDoPadrao)
       r = r.filter((c) => desvioDaMeta(c.prazoMedio, limites.meta)?.acimaDaMeta);
@@ -155,7 +158,7 @@ export default function ClientesPage() {
       percentualAcima: (a, b) => a.percentualAcima - b.percentualAcima,
     };
     return [...r].sort((a, b) => dir * cmp[ordenacao.campo](a, b));
-  }, [filtradosBase, busca, limite, limites.meta, soForaDoPadrao, ordenacao]);
+  }, [filtradosBase, busca, limites, soForaDoPadrao, ordenacao]);
 
   const totalCarteira = valorTotal(filtradosBase);
   const pmGeral = prazoMedioPonderado(filtradosBase);
@@ -164,7 +167,7 @@ export default function ClientesPage() {
   // Top 12 clientes por prazo médio, para o gráfico.
   const grafico = useMemo(
     () =>
-      resumoClientes(filtradosBase, limite)
+      resumoClientes(filtradosBase, limites)
         .filter((c) => c.prazoMedio != null)
         .sort((a, b) => (b.prazoMedio ?? 0) - (a.prazoMedio ?? 0))
         .slice(0, 12)
@@ -173,7 +176,7 @@ export default function ClientesPage() {
           prazoMedio: c.prazoMedio as number,
           empresa: c.empresas[0] ?? "Não classificado",
         })),
-    [filtradosBase, limite]
+    [filtradosBase, limites]
   );
 
   const eixo = isDark ? "#94a3b8" : "#64748b";
@@ -241,7 +244,7 @@ export default function ClientesPage() {
           </CardTitle>
           <CardDescription>
             Barras acima da linha tracejada estão acima do limite de {limite}{" "}
-            dias.
+            dias (já com a tolerância de {limites.tolerancia}).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -277,13 +280,13 @@ export default function ClientesPage() {
                     contentStyle={tip}
                     formatter={(v: number) => [`${v} dias`, "Prazo concedido"]}
                   />
-                  <ReferenceLine x={limite} stroke={CHART.critical} strokeDasharray="4 4" />
+                  <ReferenceLine x={teto} stroke={CHART.critical} strokeDasharray="4 4" />
                   <Bar dataKey="prazoMedio" name="Prazo concedido" radius={[0, 6, 6, 0]} maxBarSize={22}>
                     {grafico.map((c) => (
                       <Cell
                         key={c.sacado}
                         fill={
-                          c.prazoMedio > limite
+                          c.prazoMedio > teto
                             ? CHART.critical
                             : corEmpresa(c.empresa, isDark)
                         }
@@ -358,7 +361,7 @@ export default function ClientesPage() {
                 </TableHeader>
                 <TableBody>
                   {clientes.map((c) => {
-                    const alto = c.prazoMedio != null && c.prazoMedio > limite;
+                    const alto = c.prazoMedio != null && c.prazoMedio > teto;
                     return (
                       <TableRow key={c.sacado}>
                         <TableCell className="max-w-[240px] truncate font-medium" title={c.sacado}>

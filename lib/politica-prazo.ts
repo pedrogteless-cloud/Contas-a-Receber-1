@@ -37,13 +37,21 @@ export interface LimitesPrazo {
   /** Acima daqui o prazo não é permitido. Padrão da política: 180 dias. */
   maximo: number;
   /**
-   * Folga para a variação de calendário.
+   * Folga para dois motivos legítimos de o prazo passar um pouco do padrão
+   * sem que o pedido esteja realmente fora dele:
    *
-   * Uma condição "5x mensal" (mesmo dia de cada mês) dá 150 a 153 dias
-   * corridos, dependendo de quais meses ela atravessa — só quem entra em
-   * fevereiro fecha exatos 150. O vencimento que cai em fim de semana e é
-   * empurrado para segunda ainda soma +1 ou +2. Sem esta folga, a regra de
-   * 150 reprovaria quase toda condição mensal padrão.
+   *  1. Calendário: uma condição "5x mensal" (mesmo dia de cada mês) dá 150
+   *     a 153 dias corridos, dependendo de quais meses ela atravessa — só
+   *     quem entra em fevereiro fecha exatos 150. O vencimento em fim de
+   *     semana, empurrado para segunda, soma mais 1 ou 2.
+   *  2. Emissão da DAV: o boleto às vezes só é emitido depois que a
+   *     mercadoria chega na loja do cliente — quem cobra é ele, não a data
+   *     de saída daqui. Esse atraso entre a venda e a emissão empurra a
+   *     primeira parcela (e, com ela, todas as seguintes) alguns dias.
+   *
+   * Sem esta folga, a regra de 150 reprovaria quase toda condição mensal
+   * padrão e penalizaria vendas que só demoraram a emitir por causa do
+   * cliente.
    */
   tolerancia: number;
   /** Dias até a PRIMEIRA parcela na condição padrão. Normalmente 30. */
@@ -110,7 +118,7 @@ export function desvioDaMeta(
 export const LIMITES_PADRAO: LimitesPrazo = {
   normal: 150,
   maximo: 180,
-  tolerancia: 5,
+  tolerancia: 7,
   primeiraParcela: 30,
   meta: 90, // (150 + 30) / 2
 };
