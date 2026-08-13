@@ -169,7 +169,7 @@ export default function HistoricoPage() {
       Vencimento: formatarData(b.data_vencimento),
       "Prazo parcela (dias)": b.prazo_dias ?? "",
       "Prazo recebimento (dias)": b.prazo_recebimento ?? "",
-      Documento: b.documento ?? "",
+      DAV: b.documento ?? "",
       Parcela: b.parcela ?? "",
       "Total parcelas": b.total_parcelas ?? "",
       Valor: b.valor ?? 0,

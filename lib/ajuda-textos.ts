@@ -81,7 +81,9 @@ export const AJUDA = {
 
   // Vendas a prazo
   venda:
-    "Uma venda a prazo é o conjunto de boletos do mesmo documento. O sistema identifica pelo 'seu número': 442415-01, 442415-02 e 442415-03 são 3 parcelas da mesma venda.",
+    "Uma venda a prazo é o conjunto de boletos da mesma DAV. O sistema identifica pelo 'seu número': 442415-01, 442415-02 e 442415-03 são 3 parcelas da mesma DAV.",
+  dav:
+    "DAV = Documento Auxiliar de Venda: o número que identifica a venda, o mesmo em todas as parcelas dela. O sistema o lê do 'seu número' de cada boleto (a parte antes do sufixo da parcela) — não confundir com o 'nosso número', que o banco atribui um a um, sequencial, e nunca se repete entre parcelas.",
   valorTotalVenda:
     "Soma de todas as parcelas — o valor cheio da venda a prazo.",
   prazoUltimaParcela:

@@ -221,7 +221,7 @@ export default function VendasPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-8"
-                  placeholder="Cliente ou nº do documento"
+                  placeholder="Cliente ou nº da DAV"
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                 />
@@ -246,7 +246,7 @@ export default function VendasPage() {
                       Cliente
                     </ThOrdenavel>
                     <TableHead>Empresa</TableHead>
-                    <TableHead>Documento</TableHead>
+                    <TableHead><span className="inline-flex items-center gap-1">DAV<Ajuda titulo="DAV" texto={AJUDA.dav} /></span></TableHead>
                     <TableHead className="text-center">Parcelas</TableHead>
                     <TableHead className="text-right">Valor da parcela</TableHead>
                     <ThOrdenavel campo="valorTotal" ordenacao={ordenacao} onOrdenar={ordenarPor} align="right">
