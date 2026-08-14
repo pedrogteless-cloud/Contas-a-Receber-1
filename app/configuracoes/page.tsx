@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Fingerprint,
   Loader2,
   LogOut,
   Plus,
@@ -12,6 +13,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import { browserSupportsWebAuthn, startRegistration } from "@simplewebauthn/browser";
 
 import { supabase } from "@/lib/supabase";
 import { AJUDA } from "@/lib/ajuda-textos";
@@ -21,6 +23,7 @@ import {
   mediaDaCondicao,
 } from "@/lib/politica-prazo";
 import { cn } from "@/lib/utils";
+import { type CredencialWebAuthn, nomeAparelhoPadrao } from "@/lib/webauthn";
 import { PageHeader } from "@/components/page-header";
 import { Ajuda } from "@/components/ajuda";
 import { Button } from "@/components/ui/button";
@@ -88,6 +91,89 @@ export default function ConfiguracoesPage() {
   const [enviandoResumo, setEnviandoResumo] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
   const [aviso, setAviso] = useState<Aviso>(null);
+  const [biometriaSuportada, setBiometriaSuportada] = useState(false);
+  const [credenciais, setCredenciais] = useState<CredencialWebAuthn[] | null>(null);
+  const [cadastrandoAparelho, setCadastrandoAparelho] = useState(false);
+  const [removendoCred, setRemovendoCred] = useState<string | null>(null);
+
+  async function recarregarCredenciais() {
+    try {
+      const r = await fetch("/api/webauthn/listar").then((x) => x.json());
+      setCredenciais(r?.credenciais ?? []);
+    } catch {
+      setCredenciais([]);
+    }
+  }
+
+  async function cadastrarAparelho() {
+    setCadastrandoAparelho(true);
+    setAviso(null);
+    try {
+      const respOpcoes = await fetch("/api/webauthn/registro/opcoes", {
+        method: "POST",
+      });
+      const dadosOpcoes = await respOpcoes.json().catch(() => null);
+      if (!respOpcoes.ok || !dadosOpcoes?.ok) {
+        setAviso({
+          tipo: "erro",
+          texto: dadosOpcoes?.erro ?? "Não foi possível iniciar o cadastro.",
+        });
+        return;
+      }
+
+      const resposta = await startRegistration({ optionsJSON: dadosOpcoes.opcoes });
+
+      const respVerificar = await fetch("/api/webauthn/registro/verificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resposta, nomeAparelho: nomeAparelhoPadrao() }),
+      }).then((x) => x.json());
+
+      if (respVerificar?.ok) {
+        setAviso({ tipo: "ok", texto: "Aparelho cadastrado para biometria." });
+        await recarregarCredenciais();
+      } else {
+        setAviso({
+          tipo: "erro",
+          texto: respVerificar?.erro ?? "Não foi possível cadastrar.",
+        });
+      }
+    } catch (err) {
+      const cancelado =
+        err instanceof Error && (err.name === "NotAllowedError" || err.name === "AbortError");
+      if (!cancelado) {
+        setAviso({ tipo: "erro", texto: "Não foi possível usar a biometria neste aparelho." });
+      }
+    } finally {
+      setCadastrandoAparelho(false);
+    }
+  }
+
+  async function removerCredencial(id: string) {
+    setRemovendoCred(id);
+    setAviso(null);
+    try {
+      const r = await fetch("/api/webauthn/remover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      }).then((x) => x.json());
+      if (r?.ok) {
+        setCredenciais((prev) => prev?.filter((c) => c.id !== id) ?? null);
+      } else {
+        setAviso({ tipo: "erro", texto: r?.erro ?? "Não foi possível remover." });
+      }
+    } finally {
+      setRemovendoCred(null);
+    }
+  }
+
+  useEffect(() => {
+    if (browserSupportsWebAuthn()) {
+      setBiometriaSuportada(true);
+      recarregarCredenciais();
+    }
+  }, []);
 
   useEffect(() => {
     // `select("*")` para não quebrar caso a coluna do limite máximo ainda não
@@ -743,6 +829,82 @@ export default function ConfiguracoesPage() {
             >
               {limpando ? <Loader2 className="animate-spin" /> : <Trash2 />}
               Limpar histórico de boletos
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {biometriaSuportada && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <Fingerprint className="h-4 w-4" /> Biometria / Face ID
+            </CardTitle>
+            <CardDescription>
+              Entre sem senha usando a biometria do seu aparelho (Face ID,
+              Touch ID, Windows Hello). A biometria em si nunca sai do
+              aparelho — o sistema guarda só uma chave pública.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {credenciais === null ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+              </div>
+            ) : credenciais.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum aparelho cadastrado ainda.
+              </p>
+            ) : (
+              <ul className="divide-y rounded-md border">
+                {credenciais.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {c.nome_aparelho}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        cadastrado em{" "}
+                        {new Date(c.criado_em).toLocaleDateString("pt-BR")}
+                        {c.ultimo_uso &&
+                          ` · usado por último em ${new Date(
+                            c.ultimo_uso
+                          ).toLocaleDateString("pt-BR")}`}
+                      </span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={removendoCred === c.id}
+                      onClick={() => removerCredencial(c.id)}
+                      aria-label="Remover aparelho"
+                    >
+                      {removendoCred === c.id ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <Trash2 className="text-muted-foreground" />
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={cadastrandoAparelho}
+              onClick={cadastrarAparelho}
+            >
+              {cadastrandoAparelho ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Fingerprint />
+              )}
+              Cadastrar este aparelho
             </Button>
           </CardContent>
         </Card>

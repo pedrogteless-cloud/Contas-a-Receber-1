@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Lock, LogIn, ShieldCheck, User } from "lucide-react";
+import { Fingerprint, Loader2, Lock, LogIn, ShieldCheck, User } from "lucide-react";
+import {
+  browserSupportsWebAuthn,
+  platformAuthenticatorIsAvailable,
+  startAuthentication,
+} from "@simplewebauthn/browser";
 
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -19,6 +24,8 @@ export default function LoginPage() {
   const [confirmar, setConfirmar] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [biometriaDisponivel, setBiometriaDisponivel] = useState(false);
+  const [entrandoComBiometria, setEntrandoComBiometria] = useState(false);
 
   useEffect(() => {
     fetch("/api/setup")
@@ -26,6 +33,56 @@ export default function LoginPage() {
       .then((d) => setModo(d?.precisaSetup ? "setup" : "login"))
       .catch(() => setModo("login"));
   }, []);
+
+  useEffect(() => {
+    if (!browserSupportsWebAuthn()) return;
+    platformAuthenticatorIsAvailable()
+      .then((disponivel) => setBiometriaDisponivel(disponivel))
+      .catch(() => setBiometriaDisponivel(false));
+  }, []);
+
+  async function entrarComBiometria() {
+    setEntrandoComBiometria(true);
+    setErro(null);
+    try {
+      const respOpcoes = await fetch("/api/webauthn/login/opcoes", { method: "POST" });
+      const dadosOpcoes = (await respOpcoes.json().catch(() => null)) as {
+        ok?: boolean;
+        opcoes?: Parameters<typeof startAuthentication>[0]["optionsJSON"];
+        erro?: string;
+      } | null;
+
+      if (!respOpcoes.ok || !dadosOpcoes?.ok || !dadosOpcoes.opcoes) {
+        setErro(dadosOpcoes?.erro ?? "Não foi possível iniciar a biometria.");
+        setEntrandoComBiometria(false);
+        return;
+      }
+
+      const resposta = await startAuthentication({ optionsJSON: dadosOpcoes.opcoes });
+
+      const respVerificar = await fetch("/api/webauthn/login/verificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resposta }),
+      });
+      const r = (await respVerificar.json().catch(() => null)) as {
+        ok?: boolean;
+        erro?: string;
+      } | null;
+
+      if (respVerificar.ok && r?.ok) {
+        window.location.href = "/";
+      } else {
+        setErro(r?.erro ?? "Não foi possível entrar com biometria.");
+        setEntrandoComBiometria(false);
+      }
+    } catch (err) {
+      const cancelado =
+        err instanceof Error && (err.name === "NotAllowedError" || err.name === "AbortError");
+      setErro(cancelado ? null : "Não foi possível usar a biometria neste aparelho.");
+      setEntrandoComBiometria(false);
+    }
+  }
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -97,6 +154,30 @@ export default function LoginPage() {
                     Crie a conta de administrador (senha-mestra). Ela terá acesso
                     total, incluindo usuários e auditoria.
                   </p>
+                </div>
+              )}
+
+              {!setup && biometriaDisponivel && (
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={entrandoComBiometria}
+                    onClick={entrarComBiometria}
+                  >
+                    {entrandoComBiometria ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Fingerprint />
+                    )}
+                    Entrar com biometria
+                  </Button>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="h-px flex-1 bg-border" />
+                    ou
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
                 </div>
               )}
 

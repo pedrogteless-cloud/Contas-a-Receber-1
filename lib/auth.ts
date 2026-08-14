@@ -118,6 +118,38 @@ export function lerSessao(cookie: string | undefined | null): Sessao | null {
 export const MAX_AGE_SESSAO = DIAS_SESSAO * 24 * 60 * 60;
 
 // ---------------------------------------------------------------------------
+// Payload assinado genérico — mesmo esquema da sessão, para outros cookies de
+// vida curta (hoje: o desafio do WebAuthn, que precisa sobreviver só entre o
+// "gerar opções" e o "verificar resposta").
+// ---------------------------------------------------------------------------
+
+export function assinarPayload(dados: Record<string, unknown>, ttlMs: number): string {
+  const payload = b64url(JSON.stringify({ ...dados, exp: Date.now() + ttlMs }));
+  return `${payload}.${assinar(payload)}`;
+}
+
+export function lerPayload<T = Record<string, unknown>>(
+  valor: string | undefined | null
+): T | null {
+  if (!valor) return null;
+  const [payload, assinatura] = valor.split(".");
+  if (!payload || !assinatura) return null;
+
+  const esperada = assinar(payload);
+  const a = Buffer.from(assinatura);
+  const b = Buffer.from(esperada);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  try {
+    const dados = JSON.parse(deB64url(payload)) as T & { exp: number };
+    if (!dados.exp || dados.exp < Date.now()) return null;
+    return dados;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Permissões
 // ---------------------------------------------------------------------------
 
