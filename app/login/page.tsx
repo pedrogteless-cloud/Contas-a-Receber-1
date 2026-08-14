@@ -53,7 +53,7 @@ export default function LoginPage() {
       } | null;
 
       if (!respOpcoes.ok || !dadosOpcoes?.ok || !dadosOpcoes.opcoes) {
-        setErro(dadosOpcoes?.erro ?? "Não foi possível iniciar a biometria.");
+        setErro(dadosOpcoes?.erro ?? "Não foi possível iniciar o Face ID.");
         setEntrandoComBiometria(false);
         return;
       }
@@ -73,13 +73,13 @@ export default function LoginPage() {
       if (respVerificar.ok && r?.ok) {
         window.location.href = "/";
       } else {
-        setErro(r?.erro ?? "Não foi possível entrar com biometria.");
+        setErro(r?.erro ?? "Não foi possível entrar com Face ID.");
         setEntrandoComBiometria(false);
       }
     } catch (err) {
       const cancelado =
         err instanceof Error && (err.name === "NotAllowedError" || err.name === "AbortError");
-      setErro(cancelado ? null : "Não foi possível usar a biometria neste aparelho.");
+      setErro(cancelado ? null : "Não foi possível usar o Face ID neste aparelho.");
       setEntrandoComBiometria(false);
     }
   }
@@ -171,7 +171,7 @@ export default function LoginPage() {
                     ) : (
                       <Fingerprint />
                     )}
-                    Entrar com biometria
+                    Entrar com Face ID
                   </Button>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <div className="h-px flex-1 bg-border" />

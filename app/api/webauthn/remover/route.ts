@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   await registrarAuditoria(
     "webauthn.removido",
-    `Removeu biometria do aparelho "${existente.nome_aparelho}".`,
+    `Removeu Face ID do aparelho "${existente.nome_aparelho}".`,
     sessao
   );
 

@@ -130,7 +130,7 @@ export default function ConfiguracoesPage() {
       }).then((x) => x.json());
 
       if (respVerificar?.ok) {
-        setAviso({ tipo: "ok", texto: "Aparelho cadastrado para biometria." });
+        setAviso({ tipo: "ok", texto: "Aparelho cadastrado para Face ID." });
         await recarregarCredenciais();
       } else {
         setAviso({
@@ -142,7 +142,7 @@ export default function ConfiguracoesPage() {
       const cancelado =
         err instanceof Error && (err.name === "NotAllowedError" || err.name === "AbortError");
       if (!cancelado) {
-        setAviso({ tipo: "erro", texto: "Não foi possível usar a biometria neste aparelho." });
+        setAviso({ tipo: "erro", texto: "Não foi possível usar o Face ID neste aparelho." });
       }
     } finally {
       setCadastrandoAparelho(false);
@@ -838,11 +838,11 @@ export default function ConfiguracoesPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-1.5 text-base">
-              <Fingerprint className="h-4 w-4" /> Biometria / Face ID
+              <Fingerprint className="h-4 w-4" /> Face ID
             </CardTitle>
             <CardDescription>
-              Entre sem senha usando a biometria do seu aparelho (Face ID,
-              Touch ID, Windows Hello). A biometria em si nunca sai do
+              Entre sem senha usando o Face ID (ou Touch ID / Windows Hello,
+              dependendo do aparelho). Os dados biométricos nunca saem do
               aparelho — o sistema guarda só uma chave pública.
             </CardDescription>
           </CardHeader>

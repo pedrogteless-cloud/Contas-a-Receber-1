@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     | null) ?? null;
 
   if (!cred || !usuario || !usuario.ativo) {
-    await registrarAuditoria("login.falhou", "Tentativa de login com biometria desconhecida.", null);
+    await registrarAuditoria("login.falhou", "Tentativa de login com Face ID desconhecido.", null);
     return NextResponse.json({ ok: false, erro: "Credencial não reconhecida." }, { status: 401 });
   }
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     };
 
     await supabase.from("usuarios").update({ ultimo_acesso: agora }).eq("id", usuario.id);
-    await registrarAuditoria("login", "Entrou com biometria.", sessao);
+    await registrarAuditoria("login", "Entrou com Face ID.", sessao);
 
     const res = NextResponse.json({ ok: true, usuario: sessao });
     res.cookies.set(COOKIE_SESSAO, criarSessao(sessao), {

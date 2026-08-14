@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
     await registrarAuditoria(
       "webauthn.cadastrado",
-      `Cadastrou biometria neste aparelho ("${nomeAparelho}").`,
+      `Cadastrou Face ID neste aparelho ("${nomeAparelho}").`,
       sessao
     );
 
