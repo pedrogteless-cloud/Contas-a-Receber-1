@@ -1,17 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Download,
   Fingerprint,
+  KeyRound,
   Loader2,
   LogOut,
   Plus,
   RefreshCw,
   Save,
   Send,
+  ShieldCheck,
   Trash2,
+  Users,
 } from "lucide-react";
 import { browserSupportsWebAuthn, startRegistration } from "@simplewebauthn/browser";
 
@@ -95,6 +100,67 @@ export default function ConfiguracoesPage() {
   const [credenciais, setCredenciais] = useState<CredencialWebAuthn[] | null>(null);
   const [cadastrandoAparelho, setCadastrandoAparelho] = useState(false);
   const [removendoCred, setRemovendoCred] = useState<string | null>(null);
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [novaSenhaConfirmar, setNovaSenhaConfirmar] = useState("");
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const [avisoSenha, setAvisoSenha] = useState<Aviso>(null);
+  const [resumoAdmin, setResumoAdmin] = useState<{
+    usuariosAtivos: number;
+    totalUsuarios: number;
+    ultimaAcao: { usuario: string; acao: string; created_at: string } | null;
+  } | null>(null);
+  const [baixandoBackup, setBaixandoBackup] = useState(false);
+
+  async function trocarSenha() {
+    setAvisoSenha(null);
+    if (novaSenha !== novaSenhaConfirmar) {
+      setAvisoSenha({ tipo: "erro", texto: "As senhas novas não conferem." });
+      return;
+    }
+    setTrocandoSenha(true);
+    try {
+      const r = await fetch("/api/usuarios/senha", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senhaAtual, novaSenha }),
+      }).then((x) => x.json());
+      if (r?.ok) {
+        setAvisoSenha({ tipo: "ok", texto: "Senha alterada." });
+        setSenhaAtual("");
+        setNovaSenha("");
+        setNovaSenhaConfirmar("");
+      } else {
+        setAvisoSenha({ tipo: "erro", texto: r?.erro ?? "Não foi possível trocar a senha." });
+      }
+    } finally {
+      setTrocandoSenha(false);
+    }
+  }
+
+  async function baixarBackup() {
+    setBaixandoBackup(true);
+    setAviso(null);
+    try {
+      const resp = await fetch("/api/backup");
+      if (!resp.ok) {
+        const r = await resp.json().catch(() => null);
+        setAviso({ tipo: "erro", texto: r?.erro ?? "Não foi possível gerar o backup." });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `backup-contas-a-receber-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setAviso({ tipo: "erro", texto: "Falha ao baixar o backup." });
+    } finally {
+      setBaixandoBackup(false);
+    }
+  }
 
   async function recarregarCredenciais() {
     try {
@@ -210,6 +276,21 @@ export default function ConfiguracoesPage() {
       .then((r) => r.json())
       .then((d) => setEhAdminAtual(d?.sessao?.papel === "admin"))
       .catch(() => setEhAdminAtual(false));
+
+    fetch("/api/usuarios")
+      .then((r) => r.json())
+      .then(async (u) => {
+        if (!Array.isArray(u?.usuarios)) return;
+        const a = await fetch("/api/auditoria?limite=1")
+          .then((r) => r.json())
+          .catch(() => null);
+        setResumoAdmin({
+          usuariosAtivos: u.usuarios.filter((x: { ativo: boolean }) => x.ativo).length,
+          totalUsuarios: u.usuarios.length,
+          ultimaAcao: a?.registros?.[0] ?? null,
+        });
+      })
+      .catch(() => {});
 
     fetch("/api/telegram/status")
       .then((r) => r.json())
@@ -789,6 +870,71 @@ export default function ConfiguracoesPage() {
       </div>
 
       {ehAdminAtual && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <ShieldCheck className="h-4 w-4" /> Administração
+            </CardTitle>
+            <CardDescription>
+              Usuários, permissões e a trilha de auditoria completa vivem numa
+              tela própria.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {resumoAdmin && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Users className="h-3.5 w-3.5" /> Usuários
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {resumoAdmin.usuariosAtivos}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      ativo(s) de {resumoAdmin.totalUsuarios}
+                    </span>
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Última ação registrada
+                  </p>
+                  {resumoAdmin.ultimaAcao ? (
+                    <p className="mt-1 truncate text-sm">
+                      <span className="font-medium">{resumoAdmin.ultimaAcao.usuario}</span>
+                      {" · "}
+                      {resumoAdmin.ultimaAcao.acao}
+                      <span className="block text-xs text-muted-foreground">
+                        {new Date(resumoAdmin.ultimaAcao.created_at).toLocaleString("pt-BR")}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-muted-foreground">—</p>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/admin">
+                  <Users /> Gerenciar usuários e auditoria
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={baixandoBackup}
+                onClick={baixarBackup}
+              >
+                {baixandoBackup ? <Loader2 className="animate-spin" /> : <Download />}
+                Baixar backup (JSON)
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {ehAdminAtual && (
         <Card className="border-red-200 dark:border-red-900/60">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-1.5 text-base">
@@ -912,21 +1058,78 @@ export default function ConfiguracoesPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Acesso</CardTitle>
-          <CardDescription>
-            Encerra a sessão neste dispositivo.
-          </CardDescription>
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            <KeyRound className="h-4 w-4" /> Conta e acesso
+          </CardTitle>
+          <CardDescription>Troque sua senha ou encerre a sessão neste dispositivo.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              await fetch("/api/logout", { method: "POST" });
-              window.location.href = "/login";
-            }}
-          >
-            <LogOut /> Sair
-          </Button>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="senhaAtual">Senha atual</Label>
+              <Input
+                id="senhaAtual"
+                type="password"
+                className="w-44"
+                value={senhaAtual}
+                onChange={(e) => setSenhaAtual(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="novaSenha">Nova senha</Label>
+              <Input
+                id="novaSenha"
+                type="password"
+                className="w-44"
+                value={novaSenha}
+                onChange={(e) => setNovaSenha(e.target.value)}
+                placeholder="mín. 6 caracteres"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="novaSenhaConfirmar">Confirmar nova senha</Label>
+              <Input
+                id="novaSenhaConfirmar"
+                type="password"
+                className="w-44"
+                value={novaSenhaConfirmar}
+                onChange={(e) => setNovaSenhaConfirmar(e.target.value)}
+                placeholder="repita a nova senha"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={trocandoSenha || !senhaAtual || !novaSenha}
+              onClick={trocarSenha}
+            >
+              {trocandoSenha ? <Loader2 className="animate-spin" /> : <KeyRound />}
+              Trocar senha
+            </Button>
+          </div>
+          {avisoSenha && (
+            <p
+              className={cn(
+                "text-sm",
+                avisoSenha.tipo === "ok" ? "text-emerald-600" : "text-red-600"
+              )}
+            >
+              {avisoSenha.texto}
+            </p>
+          )}
+
+          <div className="border-t pt-4">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await fetch("/api/logout", { method: "POST" });
+                window.location.href = "/login";
+              }}
+            >
+              <LogOut /> Sair
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
