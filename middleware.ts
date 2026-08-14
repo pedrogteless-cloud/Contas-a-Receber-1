@@ -13,6 +13,10 @@ const LIVRES = new Set([
   "/api/sessao",
   "/api/setup",
   "/api/telegram/resumo",
+  // Metadados do PWA: precisam responder mesmo sem sessão (ex.: na própria
+  // tela de login), senão o navegador nunca considera o app instalável.
+  "/manifest.webmanifest",
+  "/sw.js",
 ]);
 
 /**
