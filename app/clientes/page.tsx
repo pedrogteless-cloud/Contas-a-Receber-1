@@ -518,6 +518,7 @@ export default function ClientesPage() {
                             acordo={indice.get(chave)}
                             anterior={condicaoPraticada(pedidos, c.sacado)}
                             valorCarteira={c.valor}
+                            limites={limites}
                             aoSalvar={(a) => aplicarAcordo(chave, a)}
                             aoRegistrarHistorico={recarregarHistorico}
                           />
